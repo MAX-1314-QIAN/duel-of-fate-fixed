@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --color-bg: #0a0a0b;
+  --color-surface: #151518;
+  --color-border: #2d2d35;
+  --color-text-main: #e2e2e7;
+  --color-text-dim: #8e8e9a;
+  --color-rock: #3b82f6;
+  --color-paper: #10b981;
+  --color-scissors: #ef4444;
+  --color-accent: #f59e0b;
+}
+
+body {
+  @apply bg-bg text-text-main antialiased overflow-hidden;
+  font-family: var(--font-sans);
+}
+
+.hp-bar-gradient-ai {
+  background: linear-gradient(90deg, #991b1b, #ef4444);
+}
+
+.hp-bar-gradient-player {
+  background: linear-gradient(90deg, #065f46, #10b981);
+}
+
+.card-shadow:hover {
+  box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+}
+

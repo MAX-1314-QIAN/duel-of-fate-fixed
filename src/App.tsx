@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowUp, ArrowDown, ArrowUpDown, Sword, RotateCcw, User, Cpu, ChevronRight, Info, Lock, Volume2, VolumeX, Settings } from 'lucide-react';
 import { Card, CardType, GameState, WIN_MAP } from './types';
+import { zhCN } from './locales/zh-CN';
 
 const INITIAL_HP = 5;
 const MAX_HAND = 4;
@@ -21,6 +22,8 @@ const createDeck = (): Card[] => {
   }
   return pool.sort(() => Math.random() - 0.5);
 };
+
+const cardLabel = (type: CardType) => zhCN.cards[type];
 
 const CardIcon = ({ type, className }: { type: CardType; className?: string }) => {
   switch (type) {
@@ -54,7 +57,7 @@ export default function App() {
     phase: 'PLAYER_ATTACK',
     homePlayed: [],
     guestPlayed: [],
-    lastAction: '任务开始: 请发动进攻',
+    lastAction: zhCN.logs.battleInitialized,
     winner: null,
     drawPile: deckOnMount.slice(8),
     playerDiscardPile: [],
@@ -84,7 +87,7 @@ export default function App() {
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [settlementSubPhase, setSettlementSubPhase] = useState<'resolving' | 'move-to-discard' | 'replenishing' | 'replenish-complete' | 'round-end' | null>(null);
-  const [logs, setLogs] = useState<string[]>(['任务开始: 请发动进攻']);
+  const [logs, setLogs] = useState<string[]>([zhCN.logs.battleInitialized]);
   
   const [isRerollMode, setIsRerollMode] = useState<boolean>(false);
   const [rerollSelectedCardId, setRerollSelectedCardId] = useState<string | null>(null);
@@ -168,8 +171,8 @@ export default function App() {
   const [screen, setScreen] = useState<'HOME' | 'BATTLE'>('HOME');
   const [selectedProtocol, setSelectedProtocol] = useState<'QUICK' | 'TRAINING' | 'CHALLENGE' | null>(null);
   const [homeLogs, setHomeLogs] = useState<string[]>([
-    '[ SYSTEM ] BATTLE ENGINE ONLINE',
-    '[ SYSTEM ] SELECT A PROTOCOL TO BEGIN'
+    zhCN.logs.battleEngineOnline,
+    zhCN.logs.selectProtocol,
   ]);
   const [isMuted, setIsMuted] = useState(false);
   const homeLogContainerRef = useRef<HTMLDivElement>(null);
@@ -262,8 +265,8 @@ export default function App() {
     }
 
     if (pDrawCount > 0 && pDrawnCards.length > 0) {
-      logEntries.push(`[ PLAYER ] DRAW ${pDrawnCards.length} ${pDrawnCards.length > 1 ? 'CARDS' : 'CARD'}`);
-      logEntries.push(`[ SHARED DECK ] REMAINING CARDS: ${tempDraw.length}`);
+      logEntries.push(zhCN.logs.playerDraw(pDrawnCards.length));
+      logEntries.push(zhCN.logs.sharedDeckChange(pDraw.length, tempDraw.length));
     }
 
     // AI draws up to Math.min(2, MAX_HAND - current hand size)
@@ -279,8 +282,8 @@ export default function App() {
     }
 
     if (aDrawCount > 0 && aDrawnCards.length > 0) {
-      logEntries.push(`[ AI ] DRAW ${aDrawnCards.length} ${aDrawnCards.length > 1 ? 'CARDS' : 'CARD'}`);
-      logEntries.push(`[ SHARED DECK ] REMAINING CARDS: ${tempDraw.length}`);
+      logEntries.push(zhCN.logs.aiDraw(aDrawnCards.length));
+      logEntries.push(zhCN.logs.sharedDeckChange(pDraw.length - pDrawnCards.length, tempDraw.length));
     }
 
     return {
@@ -306,7 +309,7 @@ export default function App() {
       phase: 'PLAYER_ATTACK',
       homePlayed: [],
       guestPlayed: [],
-      lastAction: '系统重启: 请发动进攻',
+      lastAction: zhCN.logs.reset,
       winner: null,
       drawPile: newDeck.slice(8),
       playerDiscardPile: [],
@@ -385,7 +388,7 @@ export default function App() {
           homeType: remainingHome[matchIdx].type,
           guestType: gCard.type,
         });
-        resultLogs.push(`[ RESULT ] ${gCard.type} > ${remainingHome[matchIdx].type}`);
+        resultLogs.push(zhCN.logs.result(cardLabel(gCard.type), '克制', cardLabel(remainingHome[matchIdx].type)));
       }
     }
 
@@ -404,7 +407,7 @@ export default function App() {
           homeType: hCard.type,
           guestType: guestAfterDraws[drawIdx].type,
         });
-        resultLogs.push(`[ RESULT ] ${hCard.type} = ${guestAfterDraws[drawIdx].type}`);
+        resultLogs.push(zhCN.logs.result(cardLabel(hCard.type), '抵消', cardLabel(guestAfterDraws[drawIdx].type)));
         guestAfterDraws.splice(drawIdx, 1);
       } else {
         finalHomeAttack.push(hCard);
@@ -429,17 +432,17 @@ export default function App() {
     const resolvedPlayerHP = Math.max(0, clashSnapshot.playerHP - playerDamage);
     const resolvedAiHP = Math.max(0, clashSnapshot.aiHP - aiDamage);
 
-    if (gCards.length === 0) resultLogs.push('[ RESULT ] NO DEFENSE');
+    if (gCards.length === 0) resultLogs.push(zhCN.logs.noDefense);
     if (aiDamage > 0) {
-      resultLogs.push(`[ DAMAGE ] AI HP -${aiDamage}`);
+      resultLogs.push(zhCN.logs.aiDamage(aiDamage));
       if (aiRoleAtClash === 'GUEST' && homeBonusApplied) {
-        resultLogs.push(`[ DAMAGE ] BASE ${baseHomeDamage} + HOME BONUS 1 = ${aiDamage}`);
+        resultLogs.push(zhCN.logs.homeBonus(baseHomeDamage, aiDamage));
       }
     }
     if (playerDamage > 0) {
-      resultLogs.push(`[ DAMAGE ] PLAYER HP -${playerDamage}`);
+      resultLogs.push(zhCN.logs.playerDamage(playerDamage));
       if (playerRoleAtClash === 'GUEST' && homeBonusApplied) {
-        resultLogs.push(`[ DAMAGE ] BASE ${baseHomeDamage} + HOME BONUS 1 = ${playerDamage}`);
+        resultLogs.push(zhCN.logs.homeBonus(baseHomeDamage, playerDamage));
       }
     }
     setLogs(prev => [...prev, ...resultLogs]);
@@ -497,18 +500,18 @@ export default function App() {
             const aiHandCount = prev.aiHand.length;
             if (playerHandCount === 0 && aiHandCount > 0) {
               winner = 'AI';
-              setResourceDepletedWinnerDetail({ eng: 'DEFEAT / RESOURCE EXHAUSTED', chn: '败北 / 我方资源耗尽' });
-              extraActionLogs += '\n[ RESULT ] PLAYER RESOURCE DEPLETED';
+              setResourceDepletedWinnerDetail({ eng: '', chn: '失败 / 我方资源耗尽' });
+              extraActionLogs += '\n[系统] 我方资源耗尽';
             } else if (aiHandCount === 0 && playerHandCount > 0) {
               winner = 'PLAYER';
-              setResourceDepletedWinnerDetail({ eng: 'VICTORY / RESOURCE EXHAUSTED', chn: '胜利 / 敌方资源耗尽' });
-              extraActionLogs += '\n[ RESULT ] AI RESOURCE DEPLETED';
+              setResourceDepletedWinnerDetail({ eng: '', chn: '胜利 / 敌方资源耗尽' });
+              extraActionLogs += '\n[系统] 敌方资源耗尽';
             } else if (playerHandCount === 0 && aiHandCount === 0) {
               winner = 'DRAW';
-              setResourceDepletedWinnerDetail({ eng: 'DRAW / RESOURCES EXHAUSTED', chn: '平局 / 双方资源耗尽' });
-              extraActionLogs += '\n[ RESULT ] BOTH RESOURCES DEPLETED';
+              setResourceDepletedWinnerDetail({ eng: '', chn: '平局 / 双方资源耗尽' });
+              extraActionLogs += '\n[系统] 双方资源耗尽';
             } else {
-              extraActionLogs += `\n[ FINAL CLASH ] NO FURTHER DRAW AVAILABLE\n[ PLAYER ] HAND REMAINING: ${playerHandCount}\n[ AI ] HAND REMAINING: ${aiHandCount}`;
+              extraActionLogs += `\n[系统] 公共牌库已空，进入最终对抗\n[玩家] 手牌剩余 ${playerHandCount} 张\n[对手] 手牌剩余 ${aiHandCount} 张`;
             }
           }
 
@@ -532,7 +535,7 @@ export default function App() {
 
     const finishReplenishment = () => {
       setSettlementSubPhase('replenish-complete');
-      setLogs(prev => [...prev, '[ SYSTEM ] REPLENISH COMPLETE', '[ 系统 ] 补牌完成，进入下一阶段']);
+      setLogs(prev => [...prev, zhCN.logs.replenishComplete]);
       scheduleSettlementTimer(finishTurn, 650);
     };
 
@@ -558,12 +561,11 @@ export default function App() {
               addAnimation('DRAW_PLAYER', 110, 620, 420 + (prev.playerHand.length + cardIndex) * 60, 648, card.type);
             }, cardIndex * 100);
           });
-          triggerDeckFeedback(`PLAYER DRAW +${drawCount}`, `玩家补牌 +${drawCount}`, `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
+          triggerDeckFeedback(`我方补牌 +${drawCount}`, zhCN.logs.playerDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
           setLogs(logPrev => [
             ...logPrev,
-            `[ REPLENISH ] PLAYER HAND: ${prev.playerHand.length} → ${prev.playerHand.length + drawCount}`,
-            `[ PLAYER ] DRAW ${drawCount} ${drawCount > 1 ? 'CARDS' : 'CARD'}`,
-            `[ SHARED DECK ] ${beforeDeckCount} → ${afterDeckCount}`,
+            zhCN.logs.playerDraw(drawCount),
+            zhCN.logs.sharedDeckChange(beforeDeckCount, afterDeckCount),
           ]);
           return {
             ...prev,
@@ -577,12 +579,11 @@ export default function App() {
             addAnimation('DRAW_AI', 110, 620, 880 + (prev.aiHand.length + cardIndex) * 40, 60, undefined);
           }, cardIndex * 100);
         });
-        triggerDeckFeedback(`AI DRAW +${drawCount}`, `AI 补牌 +${drawCount}`, `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
+        triggerDeckFeedback(`敌方补牌 +${drawCount}`, zhCN.logs.aiDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
         setLogs(logPrev => [
           ...logPrev,
-          `[ REPLENISH ] AI HAND: ${prev.aiHand.length} → ${prev.aiHand.length + drawCount}`,
-          `[ AI ] DRAW ${drawCount} ${drawCount > 1 ? 'CARDS' : 'CARD'}`,
-          `[ SHARED DECK ] ${beforeDeckCount} → ${afterDeckCount}`,
+          zhCN.logs.aiDraw(drawCount),
+          zhCN.logs.sharedDeckChange(beforeDeckCount, afterDeckCount),
         ]);
         return {
           ...prev,
@@ -639,7 +640,7 @@ export default function App() {
       executeDrawQueue(queue);
     };
 
-    scheduleSettlementTimer(() => {
+    const startDiscardSequence = () => {
       if (resolvedPlayerHP <= 0 || resolvedAiHP <= 0) {
         setState(prev => ({
           ...prev,
@@ -659,6 +660,10 @@ export default function App() {
       setSettlementSubPhase('move-to-discard');
       const playerPlayedCards = playerRoleAtClash === 'HOME' ? hCards : gCards;
       const aiPlayedCards = aiRoleAtClash === 'HOME' ? hCards : gCards;
+      const longestDiscardQueue = Math.max(playerPlayedCards.length, aiPlayedCards.length);
+      const discardAnimationDuration = longestDiscardQueue > 0
+        ? (longestDiscardQueue - 1) * 120 + 650
+        : 250;
 
       playerPlayedCards.forEach((card, index) => {
         scheduleSettlementTimer(() => addAnimation('DISCARD', 512, 430, 902, 620, card.type), index * 120);
@@ -667,11 +672,11 @@ export default function App() {
         scheduleSettlementTimer(() => addAnimation('DISCARD', 512, 280, 750, 60, card.type), index * 120);
       });
       if (playerPlayedCards.length > 0) {
-        setPlayerDiscardPrompt(`PLAYER DISCARD +${playerPlayedCards.length}`);
+        setPlayerDiscardPrompt(`${zhCN.resources.playerDiscard} +${playerPlayedCards.length}`);
         scheduleSettlementTimer(() => setPlayerDiscardPrompt(null), 1500);
       }
       if (aiPlayedCards.length > 0) {
-        setAiDiscardPrompt(`AI DISCARD +${aiPlayedCards.length}`);
+        setAiDiscardPrompt(`${zhCN.resources.aiDiscard} +${aiPlayedCards.length}`);
         scheduleSettlementTimer(() => setAiDiscardPrompt(null), 1500);
       }
 
@@ -680,8 +685,13 @@ export default function App() {
         playerDiscardPile: [...prev.playerDiscardPile, ...playerPlayedCards],
         aiDiscardPile: [...prev.aiDiscardPile, ...aiPlayedCards],
       }));
-      scheduleSettlementTimer(beginReplenishment, 900);
-    }, 1600);
+      scheduleSettlementTimer(beginReplenishment, discardAnimationDuration);
+    };
+
+    scheduleSettlementTimer(() => {
+      setClashResult(null);
+      scheduleSettlementTimer(startDiscardSequence, 250);
+    }, 850);
 
     setSelectedCards([]);
   }, [addAnimation, clearSettlementTimers, scheduleSettlementTimer, triggerDeckFeedback]);
@@ -712,7 +722,7 @@ export default function App() {
           if (tempDraw.length > 0) {
             aiDrawnCard = tempDraw.shift()!;
             hand.push(aiDrawnCard);
-            aiRerolledText = `\n[ AI ] REROLL 1 CARD\n[ SHARED DECK ] ${prev.drawPile.length} → ${tempDraw.length}`;
+            aiRerolledText = `\n${zhCN.logs.aiReroll}\n${zhCN.logs.sharedDeckChange(prev.drawPile.length, tempDraw.length)}`;
           }
         }
 
@@ -736,7 +746,7 @@ export default function App() {
           }
 
           nextPhase = 'PLAYER_DEFEND';
-          nextAction = `[ SYSTEM ] AI HAS DEPLOYED FACEDOWN CARDS\n[ 系统 ] AI 已完成暗扣，已部署 ${played.length} 张卡牌，请选择防守牌${aiRerolledText}`;
+          nextAction = `${zhCN.logs.aiDeployed(played.length)}\n[系统] 请准备防守${aiRerolledText}`;
           
           return {
             ...prev,
@@ -771,9 +781,9 @@ export default function App() {
 
           nextPhase = 'REVEAL';
           if (played.length > 0) {
-            nextAction = `[ SYSTEM ] REVEALING BOTH SIDES\n[ 系统 ] 双方同时翻牌\nAI (客场) 部署了 ${played.length} 张防守单位${aiRerolledText}`;
+            nextAction = `${zhCN.logs.revealingBoth}\n${zhCN.logs.aiDefense(played.length)}${aiRerolledText}`;
           } else {
-            nextAction = `[ SYSTEM ] AI PASS\n[ 系统 ] AI (客场) 选择放弃防守${aiRerolledText}`;
+            nextAction = `${zhCN.logs.aiPass}${aiRerolledText}`;
           }
 
           return {
@@ -795,7 +805,7 @@ export default function App() {
         if (aiDiscardedCard) {
           // AI discard: fly from hand (880, 60) to top-right AI discard pile (804, 46)
           addAnimation('DISCARD', 880, 60, 804, 46, (aiDiscardedCard as Card).type);
-          setAiDiscardPrompt('AI DISCARD +1');
+          setAiDiscardPrompt(`${zhCN.resources.aiDiscard} +1`);
           setTimeout(() => {
             setAiDiscardPrompt(null);
           }, 1500);
@@ -804,7 +814,7 @@ export default function App() {
           setTimeout(() => {
             // AI draw: fly from shared deck (110, 620) to AI hand area (880, 60) face-down
             addAnimation('DRAW_AI', 110, 620, 880, 60, undefined);
-            triggerDeckFeedback('AI REROLL', 'SHARED DECK -1', '-1');
+            triggerDeckFeedback('敌方重抽', zhCN.logs.aiReroll, '-1');
           }, 250);
         }
       }
@@ -868,7 +878,7 @@ export default function App() {
     // Trigger discard animation from hand: fly from hand (500, 640) to player's discard pile (902, 620)
     addAnimation('DISCARD', 500, 640, 902, 620, cardToDiscard.type);
 
-    setPlayerDiscardPrompt('PLAYER DISCARD +1');
+    setPlayerDiscardPrompt(`${zhCN.resources.playerDiscard} +1`);
     setTimeout(() => {
       setPlayerDiscardPrompt(null);
     }, 1500);
@@ -881,7 +891,7 @@ export default function App() {
           ...prev,
           playerHand: prev.playerHand.filter(c => c.id !== rerollSelectedCardId),
           playerDiscardPile: [...prev.playerDiscardPile, cardToDiscard],
-          lastAction: `[ SYSTEM ] DRAW PILE EMPTY\n[ 系统 ] 牌库为空，本次弃牌无法补入新牌`,
+          lastAction: `[系统] 牌库为空，本次弃牌无法补入新牌`,
         }));
         setDrawWarningPopUp(true);
       } else {
@@ -890,7 +900,7 @@ export default function App() {
         // Draw animation: from shared deck (110, 620) to player's hand (500, 640)
         addAnimation('DRAW_PLAYER', 110, 620, 500, 640, drawnCard.type);
 
-        triggerDeckFeedback('PLAYER REROLL', 'SHARED DECK -1', '-1');
+        triggerDeckFeedback('我方重抽', zhCN.logs.playerReroll, '-1');
         
         setState(prev => {
           const nextHand = prev.playerHand.filter(c => c.id !== rerollSelectedCardId);
@@ -901,7 +911,7 @@ export default function App() {
             playerHand: nextHand,
             drawPile: tempDraw,
             playerDiscardPile: tempPlayerDiscard,
-            lastAction: `[ PLAYER ] REROLL 1 CARD\n[ SHARED DECK ] ${prev.drawPile.length} → ${tempDraw.length}`,
+            lastAction: `${zhCN.logs.playerReroll}\n${zhCN.logs.sharedDeckChange(prev.drawPile.length, tempDraw.length)}`,
           };
         });
       }
@@ -934,7 +944,7 @@ export default function App() {
         playerHand: prev.playerHand.filter(c => !selectedCards.includes(c.id)),
         homePlayed: selected,
         phase: 'AI_DEFEND',
-        lastAction: `[ SYSTEM ] PLAYER HOST DEPLOYED CARDS\n[ 系统 ] 你 (主场) 派遣了 ${selected.length} 个 ${selected[0].type} 战术单元`,
+        lastAction: zhCN.logs.playerDeployed(selected.length, cardLabel(selected[0].type)),
       }));
     } else if (state.phase === 'PLAYER_DEFEND') {
       const maxTake = state.homePlayed.length;
@@ -949,8 +959,8 @@ export default function App() {
         guestPlayed: selected,
         phase: 'REVEAL',
         lastAction: selected.length > 0
-          ? `[ SYSTEM ] REVEALING BOTH SIDES\n[ 系统 ] 双方同时翻牌\n你 (客场) 投入了 ${selected.length} 个防御单元`
-          : `[ SYSTEM ] PLAYER PASS\n[ 系统 ] 你 (客场) 选择放弃防守，空过本轮`,
+          ? `${zhCN.logs.revealingBoth}\n${zhCN.logs.playerDefense(selected.length)}`
+          : zhCN.logs.playerPass,
       }));
     }
     setSelectedCards([]);
@@ -990,8 +1000,7 @@ export default function App() {
         triggerDefenseLimitNotice(maxTake);
         setLogs(prev => [
           ...prev,
-          `[ WARNING ] DEFENSE CARD LIMIT: ${maxTake}`,
-          `[ 警告 ] 防守数量上限为 ${maxTake}`
+          `[警告] ${zhCN.notices.maxDefenseCards(maxTake)}`
         ]);
         return;
       }
@@ -1018,8 +1027,8 @@ export default function App() {
         setHasLoggedDepletion(true);
         setLogs(prev => [
           ...prev,
-          '[ SYSTEM ] SHARED DECK DEPLETED',
-          '[ 系统 ] 公共牌库已耗尽，进入最终交锋'
+          zhCN.logs.sharedDeckDepleted,
+          '[系统] 进入最终交锋'
         ]);
       }
       const timer = setTimeout(() => {
@@ -1033,74 +1042,74 @@ export default function App() {
   }, [state.drawPile.length, screen, hasLoggedDepletion]);
 
   const getPhaseIndicator = () => {
-    let titleEng = "SYSTEM IDLE";
-    let titleChn = "系统空闲";
+    let titleEng = zhCN.phases.idle;
+    let titleChn = "等待下一步操作";
     let type: 'green' | 'amber' | 'blue' | 'gray' | 'red' = 'gray';
     let pulse = false;
     let bounce = false;
 
     if (state.drawPile.length === 0 && showDepletedNotification) {
-      titleEng = "SHARED DECK DEPLETED";
-      titleChn = "公共牌库已耗尽，进入最终交锋";
+      titleEng = zhCN.phases.deckDepleted;
+      titleChn = "公共牌库耗尽";
       type = 'red';
       pulse = true;
     }
     else if (isRerollMode) {
-      titleEng = "REROLL MODE";
+      titleEng = zhCN.phases.rerollMode;
       titleChn = "请选择 1 张需要弃掉的手牌";
       type = 'amber';
       pulse = true;
     }
     else if (state.playerRole === 'HOME' && state.phase === 'PLAYER_ATTACK') {
-      titleEng = "PLAYER HOME TURN";
-      titleChn = "玩家主场：请选择 1~3 张相同卡牌进攻";
+      titleEng = zhCN.phases.playerHomeTurn;
+      titleChn = "玩家主场：请选择 1~3 张相同类型卡牌进攻";
       type = 'green';
     } 
     else if (state.playerRole === 'HOME' && state.phase === 'AI_DEFEND') {
-      titleEng = "AI DEFENDING";
-      titleChn = "AI 正在选择防守牌...";
+      titleEng = zhCN.phases.aiDefending;
+      titleChn = "对手正在防守";
       type = 'amber';
       pulse = true;
       bounce = true;
     }
     else if (state.aiRole === 'HOME' && state.phase === 'PLAYER_DEFEND') {
-      titleEng = "PLAYER DEFENSE TURN";
-      titleChn = `玩家客场：AI 已暗扣 ${state.homePlayed.length} 张牌，请选择 0~${state.homePlayed.length} 张卡牌防守`;
+      titleEng = zhCN.phases.playerDefenseTurn;
+      titleChn = `玩家客场：对手已暗扣 ${state.homePlayed.length} 张牌，请选择 0~${state.homePlayed.length} 张卡牌防守`;
       type = 'green';
     }
     else if (state.phase === 'REVEAL') {
-      titleEng = "REVEAL PHASE";
-      titleChn = "双方翻牌，正在判定结果";
+      titleEng = zhCN.phases.revealPhase;
+      titleChn = "双方翻牌";
       type = 'blue';
     }
     else if (state.phase === 'RESOLVE' && settlementSubPhase === 'resolving') {
-      titleEng = "RESOLVING";
-      titleChn = "正在结算伤害";
+      titleEng = zhCN.phases.resolving;
+      titleChn = "伤害结算";
       type = 'blue';
     }
     else if (state.phase === 'RESOLVE' && settlementSubPhase === 'move-to-discard') {
-      titleEng = "DISCARD PHASE";
-      titleChn = "已使用卡牌正在进入分立弃牌区...";
+      titleEng = zhCN.phases.discardPhase;
+      titleChn = "卡牌进入弃牌区";
       type = 'blue';
     }
     else if (state.phase === 'RESOLVE' && settlementSubPhase === 'replenishing') {
-      titleEng = "REPLENISH PHASE";
-      titleChn = "双方正在从公共牌库补牌";
+      titleEng = zhCN.phases.replenishPhase;
+      titleChn = "补牌阶段";
       type = 'blue';
     }
     else if (state.phase === 'RESOLVE' && settlementSubPhase === 'replenish-complete') {
-      titleEng = "REPLENISH COMPLETE";
-      titleChn = "补牌完成，将进入下回合";
+      titleEng = zhCN.phases.replenishComplete;
+      titleChn = "补牌阶段";
       type = 'blue';
     }
     else if (state.phase === 'RESOLVE' && settlementSubPhase === 'round-end') {
-      titleEng = "ROUND END";
-      titleChn = "本回合结算完成，即将进入下轮";
+      titleEng = zhCN.phases.roundEnd;
+      titleChn = "本轮结束";
       type = 'gray';
     }
     else if (state.phase === 'AI_ATTACK') {
-      titleEng = "AI HOME TURN";
-      titleChn = "AI 正在选择攻击牌...";
+      titleEng = zhCN.phases.aiHomeTurn;
+      titleChn = "对手正在选择攻击牌...";
       type = 'amber';
       pulse = true;
       bounce = true;
@@ -1119,12 +1128,12 @@ export default function App() {
         <div className="h-20 px-10 flex items-center justify-between border-b border-border bg-surface/80 backdrop-blur-md z-20">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-mono text-[#10b981]/80 tracking-[1px] select-none uppercase">SYSTEM ONLINE</span>
+            <span className="text-[10px] font-mono text-[#10b981]/80 tracking-[1px] select-none">{zhCN.home.systemOnline}</span>
           </div>
 
           <div className="text-center select-none">
-            <div className="text-2xl font-black tracking-[4px] leading-tight select-none">TACTICAL RPS</div>
-            <div className="text-[10px] text-accent font-bold tracking-widest font-mono">战术型 RPS / BATTLE LOBBY</div>
+            <div className="text-2xl font-black tracking-[4px] leading-tight select-none">战术猜拳</div>
+            <div className="text-[10px] text-accent font-bold tracking-widest font-mono">{zhCN.home.lobbySubtitle}</div>
           </div>
 
           {/* Top Right Controls */}
@@ -1148,8 +1157,8 @@ export default function App() {
         {/* Central visual header & Float group */}
         <div className="flex-1 flex flex-col justify-center py-4 relative z-10">
           <div className="text-center mb-1 select-none">
-            <h1 className="text-4xl font-extrabold tracking-[6px] text-white">TACTICAL PROTOCOLS</h1>
-            <p className="text-[10px] font-mono text-text-dim/60 uppercase tracking-[4px] mt-1">Select battle mode to initiate system link</p>
+            <h1 className="text-4xl font-extrabold tracking-[6px] text-white">{zhCN.home.protocolTitle}</h1>
+            <p className="text-[10px] font-mono text-text-dim/60 tracking-[4px] mt-1">{zhCN.home.protocolHint}</p>
           </div>
 
           {/* Cards Stack */}
@@ -1161,22 +1170,22 @@ export default function App() {
             {/* Rock Card */}
             <div className="absolute w-[100px] h-[140px] rounded-xl bg-[#141417] border border-rock/20 flex flex-col items-center justify-center shadow-lg -translate-x-[75px] rotate-[-10deg] transition-all">
               <div className="text-4xl mb-2 text-rock select-none">✊</div>
-              <span className="text-[10px] font-mono font-black tracking-widest text-[#3b82f6]/70">ROCK / 石头</span>
-              <span className="text-[8px] font-mono text-text-dim/30 mt-1 uppercase">TACTICAL-01</span>
+              <span className="text-[10px] font-mono font-black tracking-widest text-[#3b82f6]/70">{zhCN.cards.ROCK}</span>
+              <span className="text-[8px] font-mono text-text-dim/30 mt-1">战术单元 01</span>
             </div>
 
             {/* Scissors Card */}
             <div className="absolute w-[105px] h-[148px] rounded-xl bg-[#17171c] border border-scissors/30 flex flex-col items-center justify-center shadow-2xl -translate-y-2 rotate-0 transition-all">
               <div className="text-[44px] mb-2 text-scissors select-none">✌️</div>
-              <span className="text-[11px] font-mono font-black tracking-widest text-[#ef4444]/85">SCISSORS / 剪刀</span>
-              <span className="text-[8px] font-mono text-text-dim/40 mt-1 uppercase">TACTICAL-03</span>
+              <span className="text-[11px] font-mono font-black tracking-widest text-[#ef4444]/85">{zhCN.cards.SCISSORS}</span>
+              <span className="text-[8px] font-mono text-text-dim/40 mt-1">战术单元 03</span>
             </div>
 
             {/* Paper Card */}
             <div className="absolute w-[100px] h-[140px] rounded-xl bg-[#141417] border border-paper/20 flex flex-col items-center justify-center shadow-lg translate-x-[75px] rotate-[10deg] transition-all">
               <div className="text-4xl mb-2 text-paper select-none">✋</div>
-              <span className="text-[10px] font-mono font-black tracking-widest text-[#10b981]/70">PAPER / 布</span>
-              <span className="text-[8px] font-mono text-text-dim/30 mt-1 uppercase">TACTICAL-02</span>
+              <span className="text-[10px] font-mono font-black tracking-widest text-[#10b981]/70">{zhCN.cards.PAPER}</span>
+              <span className="text-[8px] font-mono text-text-dim/30 mt-1">战术单元 02</span>
             </div>
           </motion.div>
 
@@ -1189,8 +1198,8 @@ export default function App() {
                   setSelectedProtocol('QUICK');
                   setHomeLogs(prev => [
                     ...prev,
-                    '[ SYSTEM ] QUICK MATCH PROTOCOL SELECTED',
-                    '[ SYSTEM ] READY TO INITIALIZE'
+                    zhCN.logs.quickSelected,
+                    zhCN.logs.readyToInitialize,
                   ]);
                 }
               }}
@@ -1202,17 +1211,17 @@ export default function App() {
             >
               <div>
                 <div className="flex items-center justify-between mb-3 text-[9px] font-bold font-mono">
-                  <span className="text-[#10b981] bg-[#10b981]/10 px-2 py-0.5 rounded-full uppercase tracking-wider">AVAILABLE / 已开放</span>
-                  <span className="text-accent/60 font-mono">#PROTO-01</span>
+                  <span className="text-[#10b981] bg-[#10b981]/10 px-2 py-0.5 rounded-full tracking-wider">{zhCN.home.available}</span>
+                  <span className="text-accent/60 font-mono">协议 01</span>
                 </div>
                 <h3 className={`text-[15px] font-black tracking-wide uppercase transition-colors ${
                   selectedProtocol === 'QUICK' ? 'text-accent' : 'text-[#fff]'
                 }`}>
-                  QUICK MATCH
+                  {zhCN.home.quickMatch}
                 </h3>
                 <p className="text-[11px] font-medium text-text-dim/80 mt-1 mb-5 leading-normal">
-                  快速对局
-                  <span className="block text-[10px] text-text-dim/50 mt-1">标准战术遭遇战。率先将对方 HP 清空即判定战争胜利。</span>
+                  {zhCN.home.quickMatch}
+                  <span className="block text-[10px] text-text-dim/50 mt-1">{zhCN.home.quickDescription}</span>
                 </p>
               </div>
 
@@ -1222,7 +1231,7 @@ export default function App() {
                   e.stopPropagation();
                   setHomeLogs(prev => [
                     ...prev,
-                    '[ SYSTEM ] INITIALIZING BATTLEFIELD...'
+                    zhCN.logs.initializingBattlefield,
                   ]);
                   setTimeout(() => {
                     resetGame();
@@ -1235,7 +1244,7 @@ export default function App() {
                     : 'bg-[#1e1e24] text-text-dim/20 border border-[#2d2d35]/40'
                 }`}
               >
-                START BATTLE / 开始作战
+                {zhCN.home.startBattle}
               </button>
             </div>
 
@@ -1244,8 +1253,7 @@ export default function App() {
               onClick={() => {
                 setHomeLogs(prev => [
                   ...prev,
-                  '[ SYSTEM ] PROTOCOL UNAVAILABLE',
-                  '[ 系统 ] 当前模式尚未开放'
+                  zhCN.logs.protocolUnavailable,
                 ]);
               }}
               className="w-[275px] p-5 rounded-xl border border-blue-900/35 bg-[#0e121b] flex flex-col justify-between transition-all duration-300 opacity-75 hover:border-blue-700/50 group select-none cursor-pointer"
@@ -1254,16 +1262,16 @@ export default function App() {
                 <div className="flex items-center justify-between mb-3 text-[9px] font-bold font-mono">
                   <span className="text-blue-400/80 bg-blue-950/55 border border-blue-900/40 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center">
                     <Lock className="w-2.5 h-2.5 mr-1 text-blue-400/70" />
-                    LOCKED / 尚未开放
+                    {zhCN.home.locked}
                   </span>
-                  <span className="text-blue-500/50 font-mono font-bold">#PROTO-02</span>
+                  <span className="text-blue-500/50 font-mono font-bold">协议 02</span>
                 </div>
                 <h3 className="text-[15px] font-black tracking-wide text-blue-400/90 uppercase transition-colors">
-                  TRAINING
+                  {zhCN.home.training}
                 </h3>
                 <p className="text-[11px] font-medium text-text-dim/70 mt-1 mb-5 leading-normal">
-                  教学演练
-                  <span className="block text-[10px] text-blue-500/45 mt-1">基础概念模拟。教学模式可以熟悉防守和主客场机制。</span>
+                  {zhCN.home.training}
+                  <span className="block text-[10px] text-blue-500/45 mt-1">{zhCN.home.trainingDescription}</span>
                 </p>
               </div>
 
@@ -1271,7 +1279,7 @@ export default function App() {
                 disabled
                 className="w-full py-2.5 rounded-lg text-xs font-black tracking-widest uppercase bg-blue-950/20 text-blue-400/35 border border-blue-900/30 cursor-not-allowed"
               >
-                START BATTLE / 开始作战
+                {zhCN.home.startBattle}
               </button>
             </div>
 
@@ -1280,8 +1288,7 @@ export default function App() {
               onClick={() => {
                 setHomeLogs(prev => [
                   ...prev,
-                  '[ SYSTEM ] PROTOCOL UNAVAILABLE',
-                  '[ 系统 ] 当前模式尚未开放'
+                  zhCN.logs.protocolUnavailable,
                 ]);
               }}
               className="w-[275px] p-5 rounded-xl border border-fuchsia-950/45 bg-[#130c16] flex flex-col justify-between transition-all duration-300 opacity-75 hover:border-fuchsia-750/50 group select-none cursor-pointer"
@@ -1290,16 +1297,16 @@ export default function App() {
                 <div className="flex items-center justify-between mb-3 text-[9px] font-bold font-mono">
                   <span className="text-fuchsia-400/80 bg-fuchsia-950/55 border border-fuchsia-900/40 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center">
                     <Lock className="w-2.5 h-2.5 mr-1 text-fuchsia-400/70" />
-                    LOCKED / 尚未开放
+                    {zhCN.home.locked}
                   </span>
-                  <span className="text-fuchsia-500/50 font-mono font-bold">#PROTO-03</span>
+                  <span className="text-fuchsia-500/50 font-mono font-bold">协议 03</span>
                 </div>
                 <h3 className="text-[15px] font-black tracking-wide text-fuchsia-400/90 uppercase transition-colors">
-                  CHALLENGE
+                  {zhCN.home.challenge}
                 </h3>
                 <p className="text-[11px] font-medium text-text-dim/70 mt-1 mb-5 leading-normal">
-                  挑战模式
-                  <span className="block text-[10px] text-fuchsia-500/45 mt-1">极限战术演训。面对具有更高智能分析能力的 AI 对手。</span>
+                  {zhCN.home.challenge}
+                  <span className="block text-[10px] text-fuchsia-500/45 mt-1">{zhCN.home.challengeDescription}</span>
                 </p>
               </div>
 
@@ -1307,7 +1314,7 @@ export default function App() {
                 disabled
                 className="w-full py-2.5 rounded-lg text-xs font-black tracking-widest uppercase bg-fuchsia-950/20 text-fuchsia-400/35 border border-fuchsia-900/30 cursor-not-allowed"
               >
-                START BATTLE / 开始作战
+                {zhCN.home.startBattle}
               </button>
             </div>
           </div>
@@ -1319,14 +1326,14 @@ export default function App() {
               className="w-[858px] h-[105px] bg-[#070709]/90 backdrop-blur-md rounded-xl p-3 text-[11px] overflow-y-auto border border-[#2d2d35]/85 custom-scrollbar flex flex-col gap-1 scroll-smooth font-mono"
             >
               <div className="font-bold text-accent uppercase text-[9px] tracking-widest sticky top-0 bg-[#070709] pb-1 border-b border-border/30 z-10 flex justify-between items-center select-none">
-                <span>System Console Log Terminal</span>
-                <span className="text-text-dim/30 text-[8px] font-normal">CONSOLE-SESSION-ESTABLISHED</span>
+                <span>{zhCN.home.consoleTitle}</span>
+                <span className="text-text-dim/30 text-[8px] font-normal">{zhCN.home.consoleSession}</span>
               </div>
               <div className="flex flex-col gap-0.5 pt-1">
                 {homeLogs.map((log, index) => {
-                  const isWarn = log.includes('UNAVAILABLE') || log.includes('尚未开放');
-                  const isInit = log.includes('INITIALIZING');
-                  const isSel = log.includes('SELECTED') || log.includes('READY');
+                  const isWarn = log.includes('尚未开放');
+                  const isInit = log.includes('初始化');
+                  const isSel = log.includes('已选择') || log.includes('准备');
                   
                   let textColor = 'text-text-dim/70';
                   if (isWarn) textColor = 'text-[#f59e0b] font-bold';
@@ -1359,7 +1366,7 @@ export default function App() {
       {/* Header */}
       <div className="h-20 px-10 flex items-center justify-between border-b border-border bg-surface/80 backdrop-blur-md z-20">
         <div className={`w-[300px] p-1 rounded-lg transition-all duration-350 border border-transparent ${playerHPShake ? 'animate-hp-shake' : ''} ${playerHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
-          <div className="text-[12px] mb-1 text-text-dim uppercase tracking-wider">玩家 PLAYER</div>
+          <div className="text-[12px] mb-1 text-text-dim tracking-wider">玩家</div>
           <div className="w-full h-3 bg-[#222] rounded-full overflow-hidden border border-[#333]">
             <motion.div 
               initial={false}
@@ -1369,17 +1376,17 @@ export default function App() {
           </div>
           <div className="flex justify-between mt-1 items-center font-mono opacity-80">
             <span className="text-sm">{state.playerHP}/{INITIAL_HP}</span>
-            <span className="text-[10px]">HP</span>
+            <span className="text-[10px]">生命</span>
           </div>
         </div>
 
         <div className="text-center">
-          <div className="text-2xl font-black tracking-[4px] leading-tight">TACTICAL RPS</div>
-          <div className="text-[11px] text-accent font-bold tracking-widest">BATTLE ENGINE V1.0</div>
+          <div className="text-2xl font-black tracking-[4px] leading-tight">战术猜拳</div>
+          <div className="text-[11px] text-accent font-bold tracking-widest">战斗引擎 V1.0</div>
         </div>
 
         <div className={`w-[300px] text-right p-1 rounded-lg transition-all duration-350 border border-transparent ${aiHPShake ? 'animate-hp-shake' : ''} ${aiHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
-          <div className="text-[12px] mb-1 text-text-dim uppercase tracking-wider">对手 AI</div>
+          <div className="text-[12px] mb-1 text-text-dim tracking-wider">对手</div>
           <div className="w-full h-3 bg-[#222] rounded-full overflow-hidden border border-[#333]">
             <motion.div 
               initial={false}
@@ -1389,7 +1396,7 @@ export default function App() {
           </div>
           <div className="flex justify-between mt-1 items-center font-mono opacity-80">
             <span className="text-sm">{state.aiHP}/{INITIAL_HP}</span>
-            <span className="text-[10px]">HP</span>
+            <span className="text-[10px]">生命</span>
           </div>
         </div>
       </div>
@@ -1401,8 +1408,7 @@ export default function App() {
         <div className="absolute top-6 right-10 flex gap-2 min-h-[56px] items-center">
           {state.aiHand.length === 0 ? (
             <div className="flex flex-col items-end justify-center font-mono opacity-80 text-right leading-tight border border-red-500/25 px-3 py-1.5 rounded-lg bg-red-950/20 shadow-[0_0_10px_rgba(239,68,68,0.15)] animate-[pulse_2s_infinite]">
-              <span className="text-[10px] text-red-500 font-extrabold tracking-widest leading-none">NO CARDS</span>
-              <span className="text-[8.5px] text-red-400 font-bold mt-0.5 whitespace-nowrap">敌方手牌耗尽</span>
+              <span className="text-[10px] text-red-500 font-extrabold tracking-widest leading-none">{zhCN.notices.enemyNoCards}</span>
             </div>
           ) : (
             Array.from({ length: state.aiHand.length }).map((_, i) => (
@@ -1438,8 +1444,8 @@ export default function App() {
             className={`flex items-center gap-2.5 transition-all duration-300 ${state.aiDiscardPile.length === 0 ? 'opacity-30 cursor-not-allowed' : 'opacity-100 cursor-pointer hover:scale-[1.05]'}`}
           >
             <div className="flex flex-col justify-center text-right">
-              <span className="text-[9px] text-[#ef4444] font-extrabold tracking-wider leading-none uppercase">AI DISCARD</span>
-              <span className="text-[8px] text-text-dim/60 leading-none mt-0.5 uppercase">敌方弃牌</span>
+              <span className="text-[9px] text-red-400/85 font-extrabold tracking-wider leading-none">{zhCN.resources.aiDiscard}</span>
+              <span className="text-[8px] text-red-400/60 leading-none mt-1">{zhCN.resources.totalCards(state.aiDiscardPile.length)}</span>
             </div>
             
             {/* graphics stack: smaller than draw pile */}
@@ -1456,7 +1462,6 @@ export default function App() {
               <div className="absolute w-[42px] h-[56px] bg-[#1a1a22] border border-[#ef4444]/25 rounded flex items-center justify-center shadow-md">
                 <div className="flex flex-col items-center justify-center font-mono text-[9px] text-[#ef4444]/80">
                   <span className="text-sm leading-none">▼</span>
-                  <span className="text-[8.5px] font-bold leading-none mt-0.5">{state.aiDiscardPile.length}</span>
                 </div>
               </div>
             </div>
@@ -1474,13 +1479,10 @@ export default function App() {
               <h2 className={`text-6xl font-black uppercase tracking-tighter text-accent ${
                 resourceDepletedWinnerDetail ? 'mb-4' : 'mb-8'
               }`}>
-                {state.winner === 'PLAYER' ? 'YOU WIN' : state.winner === 'AI' ? 'YOU LOSE' : 'DRAW'}
+                {state.winner === 'PLAYER' ? zhCN.gameOver.win : state.winner === 'AI' ? zhCN.gameOver.lose : zhCN.gameOver.draw}
               </h2>
               {resourceDepletedWinnerDetail && (
                 <div className="mb-8 font-mono flex flex-col items-center animate-[pulse_2s_infinite]">
-                  <span className="text-red-500 font-extrabold text-[13px] tracking-widest uppercase">
-                    {resourceDepletedWinnerDetail.eng}
-                  </span>
                   <span className="text-red-400 text-xs font-semibold mt-1">
                     {resourceDepletedWinnerDetail.chn}
                   </span>
@@ -1491,15 +1493,13 @@ export default function App() {
                   onClick={resetGame}
                   className="w-[280px] bg-accent text-black py-3 px-8 rounded-lg font-bold uppercase tracking-widest hover:opacity-80 transition-all flex flex-col items-center justify-center cursor-pointer"
                 >
-                  <span className="text-[13px] leading-tight tracking-[0.2em] font-black">RESTART MISSION</span>
-                  <span className="text-[10px] leading-tight font-medium opacity-80 mt-1">重新开始</span>
+                  <span className="text-[13px] leading-tight tracking-[0.2em] font-black">{zhCN.gameOver.restartMission}</span>
                 </button>
                 <button 
                   onClick={returnToLobby}
                   className="w-[280px] bg-[#121316] text-[#a1a1aa] border border-[#27272a] py-3 px-8 rounded-lg font-bold uppercase tracking-widest hover:border-[#52525b] hover:text-[#f4f4f5] transition-all flex flex-col items-center justify-center cursor-pointer"
                 >
-                  <span className="text-[12px] leading-tight tracking-[0.15em] font-black">RETURN TO LOBBY</span>
-                  <span className="text-[9px] leading-tight font-medium opacity-60 mt-1">返回大厅</span>
+                  <span className="text-[12px] leading-tight tracking-[0.15em] font-black">{zhCN.gameOver.returnToLobby}</span>
                 </button>
               </div>
             </motion.div>
@@ -1525,8 +1525,7 @@ export default function App() {
                       className="w-[90px] h-[120px] rounded-xl border border-red-500/30 bg-red-950/10 flex flex-col items-center justify-center font-mono select-none"
                     >
                       <div className="text-2xl mb-1 text-red-400">🛡️❌</div>
-                      <span className="text-[10px] font-black tracking-wider text-red-400 uppercase leading-none">AI PASS</span>
-                      <span className="text-[9px] text-text-dim/65 mt-1">AI 未出牌</span>
+                      <span className="text-[10px] font-black tracking-wider text-red-400 leading-none">对手放弃防守</span>
                     </motion.div>
                   ) : (
                     <div className="w-[90px] h-[120px] rounded-xl border-2 border-dashed border-border flex items-center justify-center text-text-dim opacity-30 text-2xl">?</div>
@@ -1575,12 +1574,12 @@ export default function App() {
                             const isPlayerHome = clashResult.playerRole === 'HOME';
                             const pDmg = clashResult.playerHPChange;
                             const aiDmg = clashResult.aiHPChange;
-                            if (pDmg === 0 && aiDmg === 0) return 'TACTICAL NEUTRALIZATION';
-                            if (pDmg > 0 && aiDmg > 0) return 'MUTUAL IMPACT';
+                            if (pDmg === 0 && aiDmg === 0) return '攻防抵消';
+                            if (pDmg > 0 && aiDmg > 0) return '双方受击';
                             if (aiDmg > 0) {
-                              return isPlayerHome ? 'TACTICAL BREACH' : 'TACTICAL COUNTER';
+                              return isPlayerHome ? '突破成功' : '反制成功';
                             }
-                            return isPlayerHome ? 'DEFENSIVE SHIELDS BROKEN' : 'BATTLEFIELD RUPTURE';
+                            return isPlayerHome ? '防守被突破' : '战线破裂';
                           })()}
                         </span>
                       </div>
@@ -1590,12 +1589,12 @@ export default function App() {
                         {(() => {
                           const pDmg = clashResult.playerHPChange;
                           const aiDmg = clashResult.aiHPChange;
-                          if (pDmg === 0 && aiDmg === 0) return '对冲抵消 / SHIELDED';
-                          if (pDmg > 0 && aiDmg > 0) return '双向受击 / MUTUAL DAMAGED';
+                          if (pDmg === 0 && aiDmg === 0) return '对冲抵消';
+                          if (pDmg > 0 && aiDmg > 0) return '双向受击';
                           if (aiDmg > 0) {
-                            return clashResult.noDefense ? '对方未出牌 / NO DEFENSE' : '克制成功 / STRIKE SECURED';
+                            return clashResult.noDefense ? '对方未出牌' : '克制成功';
                           }
-                          return clashResult.noDefense ? '防守空过 / NO DEFENSE' : '防守失败 / DEFENSE FAILURE';
+                          return clashResult.noDefense ? '防守空过' : '防守失败';
                         })()}
                       </div>
 
@@ -1603,22 +1602,22 @@ export default function App() {
                       <div className="w-[85%] flex flex-col gap-1 items-center justify-center border-y border-white/[0.04] py-1.5 px-3">
                         {clashResult.matches.map((item, idx) => (
                           <div key={idx} className="flex items-center gap-2.5 text-[10.5px] justify-center">
-                            <span className="opacity-50 text-[9px] leading-none uppercase">
-                              {clashResult.playerRole === 'HOME' ? '玩家' : 'AI'}
+                            <span className="opacity-50 text-[9px] leading-none">
+                              {clashResult.playerRole === 'HOME' ? '玩家' : '对手'}
                             </span>
-                            <span className="font-extrabold text-white text-[11px]">{item.homeType}</span>
+                            <span className="font-extrabold text-white text-[11px]">{item.homeType ? cardLabel(item.homeType) : ''}</span>
                             <span className={`text-[12px] font-extrabold ${item.winner === 'HOME' ? 'text-amber-400' : item.winner === 'GUEST' ? 'text-sky-400' : 'text-zinc-500'}`}>
                               {item.winner === 'HOME' ? '▶' : item.winner === 'GUEST' ? '◀' : '＝'}
                             </span>
-                            <span className="font-extrabold text-white text-[11px]">{item.guestType}</span>
-                            <span className="opacity-50 text-[9px] leading-none uppercase">
-                              {clashResult.playerRole === 'HOME' ? 'AI' : '玩家'}
+                            <span className="font-extrabold text-white text-[11px]">{item.guestType ? cardLabel(item.guestType) : ''}</span>
+                            <span className="opacity-50 text-[9px] leading-none">
+                              {clashResult.playerRole === 'HOME' ? '对手' : '玩家'}
                             </span>
                           </div>
                         ))}
                         {clashResult.matches.length === 0 && (
                           <div className="text-[10px] text-zinc-400 opacity-80 uppercase tracking-widest font-bold">
-                            NO OPPONENT ACTION / 对方未出牌
+                            对方未出牌
                           </div>
                         )}
                       </div>
@@ -1629,14 +1628,14 @@ export default function App() {
                           {(() => {
                             const pDmg = clashResult.playerHPChange;
                             const aiDmg = clashResult.aiHPChange;
-                            if (pDmg === 0 && aiDmg === 0) return <span className="text-zinc-400 font-bold tracking-widest">NO DAMAGE DEALT</span>;
+                            if (pDmg === 0 && aiDmg === 0) return <span className="text-zinc-400 font-bold tracking-widest">未造成伤害</span>;
                             return (
                               <div className="flex gap-4 items-center justify-center">
                                 {aiDmg > 0 && (
-                                  <span className="text-emerald-400 font-extrabold flex items-center gap-1">AI HP -{aiDmg} 💥</span>
+                                  <span className="text-emerald-400 font-extrabold flex items-center gap-1">敌方生命 -{aiDmg}</span>
                                 )}
                                 {pDmg > 0 && (
-                                  <span className="text-red-400 font-extrabold flex items-center gap-1">PLAYER HP -{pDmg} ⚡</span>
+                                  <span className="text-red-400 font-extrabold flex items-center gap-1">我方生命 -{pDmg}</span>
                                 )}
                               </div>
                             );
@@ -1646,9 +1645,9 @@ export default function App() {
                         {/* Extra Damage sources */}
                         {clashResult.homeBonusApplied && (clashResult.aiHPChange > 0 || clashResult.playerHPChange > 0) && (
                           <div className="text-[9.5px] text-amber-400 font-medium mt-1 uppercase tracking-wide flex items-center justify-center gap-1">
-                            <span>BASE {clashResult.baseHomeDamage}</span>
+                            <span>基础 {clashResult.baseHomeDamage}</span>
                             <span className="text-zinc-650 font-mono">+</span>
-                            <span className="text-yellow-400 font-black">HOME BONUS 1</span>
+                            <span className="text-yellow-400 font-black">主场加成 1</span>
                           </div>
                         )}
                       </div>
@@ -1689,22 +1688,18 @@ export default function App() {
                         initial={{ opacity: 0, y: -2 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
-                        className={`w-[450px] py-1.5 px-3.5 rounded-lg bg-[#0e0f14]/90 border ${borderClass} ${glowClass} backdrop-blur-md flex items-center justify-between font-mono select-none relative overflow-hidden ${pulse ? 'animate-pulse' : ''}`}
+                        className={`w-[450px] min-h-[34px] py-1.5 px-4 rounded-lg bg-[#0e0f14]/90 border ${borderClass} ${glowClass} backdrop-blur-md flex items-center justify-center font-mono select-none relative overflow-hidden ${pulse ? 'animate-pulse' : ''}`}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-center gap-2 min-w-0">
                           <div className="relative flex h-2 w-2">
                             {pulse && (
                               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${lightBgClass} opacity-75`}></span>
                             )}
                             <span className={`relative inline-flex rounded-full h-2 w-2 ${lightBgClass}`}></span>
                           </div>
-                          <span className={`text-[10px] font-black tracking-widest uppercase ${accentTextClass}`}>
-                            {titleEng}
+                          <span className={`text-[11px] font-black tracking-wider truncate ${accentTextClass}`}>
+                            {titleChn}
                           </span>
-                        </div>
-
-                        <div className="text-[10px] text-text-dim/90 font-medium flex items-center">
-                          <span>{titleChn}</span>
                           {bounce && (
                             <span className="inline-flex gap-0.5 ml-1">
                               <span className="animate-[bounce_0.6s_infinite_100ms] inline-block h-1 w-1 bg-amber-400 rounded-full"></span>
@@ -1729,8 +1724,8 @@ export default function App() {
                     transition={{ duration: 0.15 }}
                     className="absolute top-[204px] z-[90] w-[320px] py-1.5 px-2 bg-[#100607]/95 border border-red-500/40 text-center rounded-lg shadow-[0_0_15px_rgba(239,68,68,0.18)] pointer-events-none font-mono"
                   >
-                    <div className="text-[10px] font-black uppercase text-red-400 tracking-wider">DEFENSE LIMIT REACHED</div>
-                    <div className="text-[10.5px] text-red-200 mt-0.5">最多只能选择 {defenseLimitNotice} 张防守牌</div>
+                    <div className="text-[10px] font-black text-red-400 tracking-wider">{zhCN.notices.defenseLimitReached}</div>
+                    <div className="text-[10.5px] text-red-200 mt-0.5">{zhCN.notices.maxDefenseCards(defenseLimitNotice)}</div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -1752,14 +1747,14 @@ export default function App() {
           ref={logContainerRef}
           className="absolute left-10 bottom-10 w-[280px] h-[135px] bg-[#0a0a0b]/80 backdrop-blur-md rounded-xl p-3.5 text-[12px] overflow-y-auto border border-border custom-scrollbar flex flex-col gap-1.5 scroll-smooth z-30"
         >
-          <div className="font-bold text-accent uppercase text-[10px] tracking-widest sticky top-0 bg-[#0a0a0b]/10 backdrop-blur-[2px] pb-1 border-b border-border/40 z-10">Protocol Log</div>
+          <div className="font-bold text-accent text-[10px] tracking-widest sticky top-0 bg-[#0a0a0b]/10 backdrop-blur-[2px] pb-1 border-b border-border/40 z-10">战斗日志</div>
           <div className="flex flex-col gap-1.5 pt-1 font-mono">
             {logs.map((log, index) => {
-              const isPlayer = log.includes('你') || log.includes('玩家');
-              const isAI = log.includes('AI');
-              const isSettlement = log.includes('结算') || log.includes('伤害');
-              const isInvalid = log.includes('无效') || log.includes('指令无效');
-              const isSystem = log.includes('任务开始') || log.includes('系统重启');
+              const isPlayer = log.includes('[玩家]') || log.includes('[我方]');
+              const isAI = log.includes('[对手]') || log.includes('[敌方]');
+              const isSettlement = log.includes('[结算]') || log.includes('[伤害]');
+              const isInvalid = log.includes('无效');
+              const isSystem = log.includes('[系统]') || log.includes('[公共牌库]');
               
               let textColor = 'text-text-dim';
               if (isSystem) textColor = 'text-[#10b981]/80'; // Emerald / green
@@ -1792,7 +1787,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className={`absolute bottom-[110px] flex flex-col items-center text-center font-mono font-bold leading-tight select-none pointer-events-none rounded-lg px-2.5 py-1.5 border min-w-[130px] shadow-lg z-[30] ${
-                  sharedDeckPrompt.startsWith('PLAYER') 
+                  sharedDeckPrompt.startsWith('我方') || sharedDeckPrompt.startsWith('玩家')
                     ? 'bg-[#064e3b]/95 border-emerald-500/40 text-emerald-400' 
                     : 'bg-[#7f1d1d]/95 border-red-500/40 text-red-100 text-red-400'
                 }`}
@@ -1808,37 +1803,21 @@ export default function App() {
             )}
           </AnimatePresence>
 
-          <div className="flex items-center gap-2.5 relative">
-            {/* Numeric info on the left */}
-            <div className="flex flex-col justify-center text-right font-mono relative">
-              <AnimatePresence>
-                {sharedDeckChangeAmount && (
-                  <motion.div
-                    initial={{ scale: 0.5, opacity: 0, y: 0 }}
-                    animate={{ scale: 1.25, opacity: 1, y: -18 }}
-                    exit={{ opacity: 0 }}
-                    className={`absolute right-1 top-0 font-mono font-black text-sm z-[20] ${
-                      sharedDeckPrompt?.startsWith('PLAYER') ? 'text-emerald-400' : 'text-red-400'
-                    }`}
-                  >
-                    {sharedDeckChangeAmount}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <span className={`text-xl font-black tracking-tighter inline-block origin-right transform transition-all duration-200 ${
-                sharedDeckScale ? 'scale-[1.3] text-zinc-100' : 'text-zinc-300'
-              } ${
-                state.drawPile.length === 0 ? 'text-red-500 font-bold animate-[pulse_1.2s_infinite]' :
-                state.drawPile.length <= 5 ? 'text-red-500 animate-[pulse_1s_infinite]' :
-                state.drawPile.length <= 10 ? 'text-amber-500' : 'text-zinc-300'
-              }`}>
-                {state.drawPile.length}
-              </span>
-              <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-wider leading-none">
-                {state.drawPile.length === 0 ? 'DEPLETED' : 'CARDS'}
-              </span>
-            </div>
+          <div className="flex items-center justify-center relative">
+            <AnimatePresence>
+              {sharedDeckChangeAmount && (
+                <motion.div
+                  initial={{ scale: 0.5, opacity: 0, y: 0 }}
+                  animate={{ scale: 1.25, opacity: 1, y: -18 }}
+                  exit={{ opacity: 0 }}
+                  className={`absolute -left-8 top-2 font-mono font-black text-sm z-[20] ${
+                    sharedDeckPrompt?.startsWith('我方') || sharedDeckPrompt?.startsWith('玩家') ? 'text-emerald-400' : 'text-red-400'
+                  }`}
+                >
+                  {sharedDeckChangeAmount}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Deck stack view */}
             <div className={`relative w-[50px] h-[70px] flex items-center justify-center transition-transform duration-250 ${
@@ -1853,34 +1832,18 @@ export default function App() {
                 <div className="absolute w-[46px] h-[66px] bg-zinc-800 border border-zinc-700 rounded-md translate-x-0.5 translate-y-0.5 rotate-3 opacity-60 shadow flex items-center justify-center" />
               )}
               {/* Card 1 (Top) */}
-              <div className={`absolute w-[48px] h-[68px] bg-[#1a1c23] border rounded-md flex items-center justify-center shadow-md transition-all ${
-                state.drawPile.length === 0 ? 'border-red-500/90 bg-red-950/30 animate-[pulse_1.5s_infinite] shadow-[0_0_15px_rgba(239,68,68,0.45)]' :
-                state.drawPile.length <= 5 ? 'border-red-500/50 hover:border-red-400' : 'border-zinc-750'
-              }`}>
-                {state.drawPile.length === 0 ? (
-                  <ArrowUpDown className="w-3.5 h-3.5 text-red-500 animate-[bounce_1.5s_infinite]" />
-                ) : (
-                  <div className="relative w-full h-full flex items-center justify-center">
-                    <ArrowUpDown className="w-4 h-4 text-zinc-500 opacity-80" />
-                  </div>
-                )}
+              <div className="absolute w-[48px] h-[68px] bg-[#1a1c23] border border-slate-500/35 rounded-md flex items-center justify-center shadow-md transition-all">
+                <div className="relative w-full h-full flex items-center justify-center">
+                  <ArrowUpDown className="w-4 h-4 text-slate-300/70" />
+                </div>
               </div>
             </div>
           </div>
           
-          <div className="text-[9px] text-zinc-400 font-extrabold uppercase font-mono tracking-widest mt-2 text-center leading-tight">
-            SHARED DECK
-            <span className="block text-[8px] text-zinc-500 font-semibold mt-0.5">公共牌库</span>
+          <div className="text-[9px] text-slate-300/85 font-extrabold font-mono tracking-widest mt-2 text-center leading-tight">
+            {zhCN.resources.sharedDeck}
+            <span className="block text-[8px] text-slate-400/80 font-semibold mt-0.5">{zhCN.resources.remainingCards(state.drawPile.length)}</span>
           </div>
-          {state.drawPile.length === 0 ? (
-            <div className="text-[8px] text-red-500 font-bold font-mono tracking-wider mt-1 text-center max-w-[130px] uppercase leading-tight animate-[pulse_1.2s_infinite]">
-              DEPLETED / 已耗尽
-            </div>
-          ) : (
-            <div className="text-[7.5px] text-zinc-500 font-bold font-mono tracking-tight mt-1 text-center max-w-[130px] uppercase leading-tight">
-              AVAILABLE / 可用
-            </div>
-          )}
         </div>
 
         {/* CENTER COLUMN: ACTIVE HAND CARDS & CONTROL BUTTONS */}
@@ -1888,8 +1851,7 @@ export default function App() {
           <div className="flex gap-4 min-h-[120px] items-center">
             {state.playerHand.length === 0 ? (
               <div className="flex flex-col items-center justify-center font-mono text-center border border-dashed border-red-500/20 px-8 py-4 rounded-xl bg-red-950/20 shadow-[0_0_12px_rgba(239,68,68,0.15)] animate-[pulse_2s_infinite]">
-                <span className="text-red-500 text-xs font-black tracking-widest uppercase">NO CARDS</span>
-                <span className="text-red-400 font-bold text-[10px] mt-1 whitespace-nowrap">无可用手牌</span>
+                <span className="text-red-500 text-xs font-black tracking-widest">{zhCN.notices.noCards}</span>
               </div>
             ) : (
               state.playerHand.map((card, idx) => {
@@ -1930,8 +1892,8 @@ export default function App() {
                     `}
                   >
                     <CardIcon type={card.type} className="text-4xl mb-2" />
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-dim">
-                      {card.type}
+                    <div className="text-[10px] font-bold tracking-wider text-text-dim">
+                      {cardLabel(card.type)}
                     </div>
                   </motion.div>
                 );
@@ -1944,22 +1906,18 @@ export default function App() {
             {isRerollMode ? (
               <button 
                 onClick={onCancelReroll}
-                className="w-[180px] h-[40px] rounded-lg font-bold text-white bg-[#2d2d35] uppercase active:scale-95 cursor-pointer hover:bg-zinc-700 transition-colors flex flex-col items-center justify-center leading-tight shadow-md"
+                className="w-[180px] h-[40px] rounded-lg font-bold text-white bg-[#2d2d35] active:scale-95 cursor-pointer hover:bg-zinc-700 transition-colors flex flex-col items-center justify-center leading-tight shadow-md"
               >
-                <span className="text-[11px] font-black tracking-widest">CANCEL</span>
-                <span className="text-[9px] opacity-80">取消选择</span>
+                <span className="text-[12px] font-black tracking-widest">{zhCN.actions.cancel}</span>
               </button>
             ) : (
               <button 
                 onClick={onStartRerollMode}
                 disabled={playerHasRerolledThisTurn || !isPlayerTurnState || isProcessing || state.drawPile.length === 0}
-                className="w-[180px] h-[40px] rounded-lg font-bold text-white bg-[#2d2d35]/50 border border-zinc-800/40 uppercase tracking-wider transition-all duration-200 hover:bg-zinc-700 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:bg-[#1a1a20]/60 disabled:text-text-dim/20 disabled:border disabled:border-zinc-800/40 flex flex-col items-center justify-center leading-tight shadow-md"
+                className="w-[180px] h-[40px] rounded-lg font-bold text-white bg-[#2d2d35]/50 border border-zinc-800/40 tracking-wider transition-all duration-200 hover:bg-zinc-700 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:bg-[#1a1a20]/60 disabled:text-text-dim/20 disabled:border disabled:border-zinc-800/40 flex flex-col items-center justify-center leading-tight shadow-md"
               >
                 <span className="text-[11px] font-black tracking-wider">
-                  {state.drawPile.length === 0 ? 'REROLL DISABLED' : playerHasRerolledThisTurn ? 'REROLLED' : 'REROLL 1 CARD'}
-                </span>
-                <span className="text-[9px] opacity-80">
-                  {state.drawPile.length === 0 ? '公共牌库已耗尽' : playerHasRerolledThisTurn ? '回合已弃 1' : '弃 1 抽 1'}
+                  {zhCN.actions.rerollOne}
                 </span>
               </button>
             )}
@@ -1969,10 +1927,9 @@ export default function App() {
               <button 
                 disabled={!rerollSelectedCardId || isProcessing}
                 onClick={onConfirmReroll}
-                className="w-[180px] h-[40px] rounded-lg font-bold text-black bg-amber-500 uppercase tracking-wider shadow-lg shadow-amber-500/15 active:scale-95 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed hover:bg-amber-400 transition-colors flex flex-col items-center justify-center leading-tight animate-[pulse_1.5s_infinite]"
+                className="w-[180px] h-[40px] rounded-lg font-bold text-black bg-amber-500 tracking-wider shadow-lg shadow-amber-500/15 active:scale-95 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed hover:bg-amber-400 transition-colors flex flex-col items-center justify-center leading-tight animate-[pulse_1.5s_infinite]"
               >
-                <span className="text-[11px] font-black tracking-widest">CONFIRM REROLL</span>
-                <span className="text-[9px] font-bold opacity-90">确认弃牌</span>
+                <span className="text-[12px] font-black tracking-widest">{zhCN.actions.confirmReroll}</span>
               </button>
             ) : (
               (() => {
@@ -1982,16 +1939,16 @@ export default function App() {
                 // Disable confirm play if: not player state, or processing, or if not defend (meaning attack) and selectedCards.length is 0
                 const rightDisabled = !isPlayerTurnState || isProcessing || (state.phase === 'PLAYER_ATTACK' && selectedCards.length === 0) || state.winner !== null;
 
-                let rightTextEng = "CONFIRM PLAY";
-                let rightTextChn = "确认出牌";
+                let rightTextEng = zhCN.actions.confirmPlay;
+                let rightTextChn = "";
 
                 if (isDefend) {
                   if (hasSelected) {
-                    rightTextEng = `CONFIRM DEFENSE (${selectedCards.length})`;
-                    rightTextChn = "确认防守";
+                    rightTextEng = zhCN.actions.confirmDefense(selectedCards.length);
+                    rightTextChn = "";
                   } else {
-                    rightTextEng = "PASS";
-                    rightTextChn = "放弃防守";
+                    rightTextEng = zhCN.actions.pass;
+                    rightTextChn = "";
                   }
                 }
 
@@ -1999,15 +1956,15 @@ export default function App() {
                   <button 
                     disabled={rightDisabled}
                     onClick={onPlay}
-                    className={`w-[180px] h-[40px] rounded-lg font-bold text-black bg-accent uppercase tracking-wider transition-all duration-200 active:scale-95 cursor-pointer flex flex-col items-center justify-center leading-tight
+                    className={`w-[180px] h-[40px] rounded-lg font-bold text-black bg-accent tracking-wider transition-all duration-200 active:scale-95 cursor-pointer flex flex-col items-center justify-center leading-tight
                       ${rightDisabled 
                         ? 'bg-zinc-800/40 text-text-dim/20 border border-zinc-800/30 cursor-not-allowed shadow-none' 
                         : 'shadow-lg shadow-accent/15 hover:opacity-90'
                       }
                     `}
                   >
-                    <span className="text-[11px] font-black tracking-wider">{rightTextEng}</span>
-                    <span className="text-[9px] font-medium opacity-80">{rightTextChn}</span>
+                    <span className="text-[12px] font-black tracking-wider">{rightTextEng}</span>
+                    {rightTextChn && <span className="text-[9px] font-medium opacity-80">{rightTextChn}</span>}
                   </button>
                 );
               })()
@@ -2026,7 +1983,7 @@ export default function App() {
                 className="absolute bottom-[110px] bg-[#064e3b]/95 border border-emerald-500/30 rounded px-2.5 py-1.5 flex flex-col items-center select-none pointer-events-none font-mono text-emerald-400 font-bold leading-tight z-[30] min-w-[125px] text-center"
               >
                 <span className="text-[9px] tracking-wider font-extrabold">{playerDiscardPrompt}</span>
-                <span className="text-[8px] opacity-75 mt-0.5 font-bold">我方弃牌区更新</span>
+                <span className="text-[8px] opacity-75 mt-0.5 font-bold">{zhCN.resources.playerDiscardUpdated}</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -2040,8 +1997,10 @@ export default function App() {
           >
             {/* Numeric display on the left */}
             <div className="flex flex-col justify-center text-right font-mono">
-              <span className="text-[9px] text-emerald-400 font-extrabold tracking-wider leading-none uppercase">PLAYER DISCARD</span>
-              <span className="text-[8px] text-text-dim/60 leading-none mt-0.5 uppercase">我方弃牌</span>
+              <span className="text-[9px] text-emerald-400 font-extrabold tracking-wider leading-none">{zhCN.resources.playerDiscard}</span>
+              <span className="text-[8px] text-emerald-500/70 font-semibold leading-none mt-1">
+                {zhCN.resources.totalCards(state.playerDiscardPile.length)}
+              </span>
             </div>
 
             {/* graphics stack: matching AI discards size */}
@@ -2058,34 +2017,20 @@ export default function App() {
               <div className="absolute w-[42px] h-[56px] bg-[#1a1a22] border border-emerald-500/25 rounded flex items-center justify-center shadow-md">
                 <div className="flex flex-col items-center justify-center font-mono text-[9px] text-emerald-400/80">
                   <span className="text-sm leading-none">▼</span>
-                  <span className="text-[8.5px] font-bold leading-none mt-0.5">{state.playerDiscardPile.length}</span>
                 </div>
               </div>
             </div>
-          </div>
-          
-          <div className="text-[9px] text-[#10b981] font-extrabold uppercase font-mono tracking-widest mt-2 text-center leading-tight">
-            PLAYER DISCARD
-            <span className="block text-[8px] text-emerald-500/60 font-semibold mt-0.5">我方弃牌</span>
           </div>
         </div>
 
       </div>
 
       {/* Rules Mini Info */}
-      <div className="absolute top-[210px] right-10 text-[10px] text-text-dim/60 uppercase tracking-widest font-mono space-y-2.5 text-right pointer-events-none select-none max-w-[200px]">
-        <div>
-          <p className="font-extrabold text-text-dim/80">SHARED DECK: 30 CARDS</p>
-          <p className="text-[9px] text-text-dim/40 leading-tight">公共牌库：双方共同抽取</p>
-        </div>
-        <div>
-          <p className="font-extrabold text-text-dim/80">DISCARD: SEPARATE</p>
-          <p className="text-[9px] text-text-dim/40 leading-tight">弃牌区：双方独立记录</p>
-        </div>
-        <div>
-          <p className="font-extrabold text-text-dim/80">NO RESHUFFLE</p>
-          <p className="text-[9px] text-text-dim/40 leading-tight">牌库耗尽后不洗牌</p>
-        </div>
+      <div className="absolute top-[210px] right-10 text-[10px] text-text-dim/55 tracking-widest font-mono space-y-1.5 text-right pointer-events-none select-none max-w-[210px]">
+        <p className="font-extrabold text-text-dim/80">{zhCN.resources.initialSharedDeck}</p>
+        <p className="text-[9px] text-text-dim/45 leading-tight">{zhCN.resources.sharedDeckRule}</p>
+        <p className="text-[9px] text-text-dim/45 leading-tight">弃牌区：双方独立记录</p>
+        <p className="text-[9px] text-text-dim/45 leading-tight">{zhCN.resources.noReshuffle}</p>
       </div>
 
       {/* Floating Notice Bar (Warning Prompts) */}
@@ -2117,17 +2062,17 @@ export default function App() {
               <div className="w-12 h-12 rounded-full bg-red-950/50 border border-red-500/40 flex items-center justify-center text-red-500 text-2xl mb-4 animate-pulse">
                 ⚠️
               </div>
-              <h3 className="text-red-400 font-bold uppercase tracking-widest text-sm mb-1">
-                DRAW PILE EMPTY
+              <h3 className="text-red-400 font-bold tracking-widest text-sm mb-1">
+                {zhCN.notices.drawPileEmpty}
               </h3>
               <p className="text-[11px] text-text-dim/80 mb-5 leading-relaxed">
-                战术备用单元已完全精简释放！本次洗牌及备用库已彻底耗尽，无法为您部署额外补给卡牌。
+                {zhCN.notices.drawPileEmptyDetail}
               </p>
               <button
                 onClick={() => setDrawWarningPopUp(false)}
-                className="w-full py-2 bg-red-950/20 hover:bg-red-900/45 border border-red-500/30 font-bold uppercase tracking-widest text-[10px] text-red-400 rounded-lg transition-all active:scale-95"
+                className="w-full py-2 bg-red-950/20 hover:bg-red-900/45 border border-red-500/30 font-bold tracking-widest text-[10px] text-red-400 rounded-lg transition-all active:scale-95"
               >
-                ACKNOWLEDGE / 确认
+                {zhCN.actions.acknowledge}
               </button>
             </motion.div>
           </div>
@@ -2146,11 +2091,11 @@ export default function App() {
             >
               <div className="flex justify-between items-center mb-4 pb-1.5 border-b border-white/[0.06]">
                 <div className="text-left">
-                  <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-dim">
-                    {activeDiscardModal === 'PLAYER' ? 'PLAYER DISCARD' : 'AI DISCARD'}
+                  <h4 className="text-[11px] font-bold tracking-widest text-text-dim">
+                    {activeDiscardModal === 'PLAYER' ? zhCN.resources.playerDiscard : zhCN.resources.aiDiscard}
                   </h4>
                   <p className="text-[9px] text-text-dim/50 leading-none">
-                    {activeDiscardModal === 'PLAYER' ? '我方弃牌统计' : '敌方弃牌统计'}
+                    {activeDiscardModal === 'PLAYER' ? '我方弃牌构成' : '敌方弃牌构成'}
                   </p>
                 </div>
                 <button
@@ -2179,7 +2124,7 @@ export default function App() {
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2">
                         <span className="text-base select-none">✊</span>
-                        <span className="text-text-dim/80">ROCK / 石头</span>
+                        <span className="text-text-dim/80">{zhCN.cards.ROCK}</span>
                       </div>
                       <span className="font-bold text-[#e5e5eb] font-mono">× {stats.ROCK}</span>
                     </div>
@@ -2187,7 +2132,7 @@ export default function App() {
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2">
                         <span className="text-base select-none">✌️</span>
-                        <span className="text-text-dim/80">SCISSORS / 剪刀</span>
+                        <span className="text-text-dim/80">{zhCN.cards.SCISSORS}</span>
                       </div>
                       <span className="font-bold text-[#e5e5eb] font-mono">× {stats.SCISSORS}</span>
                     </div>
@@ -2195,7 +2140,7 @@ export default function App() {
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2">
                         <span className="text-base select-none">✋</span>
-                        <span className="text-text-dim/80">PAPER / 布</span>
+                        <span className="text-text-dim/80">{zhCN.cards.PAPER}</span>
                       </div>
                       <span className="font-bold text-[#e5e5eb] font-mono">× {stats.PAPER}</span>
                     </div>
@@ -2231,7 +2176,7 @@ export default function App() {
                 {anim.cardType ? (
                   <div className="flex flex-col items-center justify-center">
                     <CardIcon type={anim.cardType} className="text-2xl" />
-                    <span className="text-[7.5px] font-black tracking-wider uppercase opacity-40 mt-1">{anim.cardType}</span>
+                    <span className="text-[7.5px] font-black tracking-wider opacity-40 mt-1">{cardLabel(anim.cardType)}</span>
                   </div>
                 ) : (
                   <div className="text-xl text-text-dim/30">🎴</div>
@@ -2281,8 +2226,8 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
       >
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-500 opacity-60" />
         <div className="text-3xl mb-1 text-blue-400 select-none animate-pulse">🎴</div>
-        <span className="text-[8px] font-mono font-black tracking-widest text-[#3b82f6]/95 uppercase">ENEMY CARD</span>
-        <span className="text-[8px] font-mono font-black text-text-dim/60 mt-0.5">FACEDOWN</span>
+        <span className="text-[8px] font-mono font-black tracking-widest text-[#3b82f6]/95">敌方卡牌</span>
+        <span className="text-[8px] font-mono font-black text-text-dim/60 mt-0.5">暗扣</span>
       </motion.div>
     );
   }
@@ -2294,8 +2239,7 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
       className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl ${getCardBorderClass(card.type)}`}
     >
       <CardIcon type={card.type} className="text-3xl mb-1" />
-      <span className="text-[9px] font-black tracking-widest uppercase opacity-40">{card.type}</span>
+      <span className="text-[9px] font-black tracking-widest opacity-40">{cardLabel(card.type)}</span>
     </motion.div>
   );
 }
-

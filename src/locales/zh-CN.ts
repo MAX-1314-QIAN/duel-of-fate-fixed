@@ -18,7 +18,7 @@ export const zhCN = {
   },
   phases: {
     idle: '系统待命',
-    deckDepleted: '公共牌库耗尽',
+    deckDepleted: '公共牌库已耗尽，进入最终交锋',
     rerollMode: '弃牌重抽',
     playerHomeTurn: '玩家主场',
     playerDefenseTurn: '玩家客场',
@@ -77,6 +77,7 @@ export const zhCN = {
     maxDefenseCards: (limit: number) => `最多选择 ${limit} 张防守牌`,
     drawPileEmpty: '牌库为空',
     drawPileEmptyDetail: '公共牌库已经耗尽，本次弃牌无法补入新牌。',
+    rerollDeckEmpty: '公共牌库已耗尽，无法刷新手牌',
   },
   logs: {
     battleEngineOnline: '[系统] 作战引擎在线',
@@ -105,7 +106,11 @@ export const zhCN = {
     aiDamage: (amount: number) => `[伤害] 敌方生命 -${amount}`,
     playerDamage: (amount: number) => `[伤害] 我方生命 -${amount}`,
     homeBonus: (base: number, total: number) => `[伤害] 基础 ${base} + 主场加成 1 = ${total}`,
-    sharedDeckDepleted: '[系统] 公共牌库已耗尽',
+    sharedDeckDepleted: '[系统] 公共牌库已耗尽，进入最终交锋',
+    limitedSharedDeck: '[补牌] 公共牌库不足，启用交替抽牌',
+    finalClashNoReplenish: '[最终交锋] 无法继续补牌',
+    playerHandRemaining: (count: number) => `[玩家] 剩余手牌：${count}`,
+    aiHandRemaining: (count: number) => `[对手] 剩余手牌：${count}`,
   },
 };
 

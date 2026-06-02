@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowUp, ArrowDown, ArrowUpDown, Sword, RotateCcw, User, Cpu, ChevronRight, Info, Lock, Volume2, VolumeX, Settings } from 'lucide-react';
 import { Card, CardType, GameState, WIN_MAP } from './types';
 import { zhCN } from './locales/zh-CN';
+import { allocateLimitedSharedDeckDraws, DrawQueueItem } from './game/sharedDeck';
 
-const INITIAL_HP = 5;
+const INITIAL_HP = 10;
 const MAX_HAND = 4;
 const CARD_TYPES: CardType[] = ['ROCK', 'PAPER', 'SCISSORS'];
 
@@ -500,18 +501,18 @@ export default function App() {
             const aiHandCount = prev.aiHand.length;
             if (playerHandCount === 0 && aiHandCount > 0) {
               winner = 'AI';
-              setResourceDepletedWinnerDetail({ eng: '', chn: '失败 / 我方资源耗尽' });
-              extraActionLogs += '\n[系统] 我方资源耗尽';
+              setResourceDepletedWinnerDetail({ eng: '', chn: '失败：我方无可用卡牌' });
+              extraActionLogs += '\n[系统] 失败：我方无可用卡牌';
             } else if (aiHandCount === 0 && playerHandCount > 0) {
               winner = 'PLAYER';
-              setResourceDepletedWinnerDetail({ eng: '', chn: '胜利 / 敌方资源耗尽' });
-              extraActionLogs += '\n[系统] 敌方资源耗尽';
+              setResourceDepletedWinnerDetail({ eng: '', chn: '胜利：敌方无可用卡牌' });
+              extraActionLogs += '\n[系统] 胜利：敌方无可用卡牌';
             } else if (playerHandCount === 0 && aiHandCount === 0) {
               winner = 'DRAW';
-              setResourceDepletedWinnerDetail({ eng: '', chn: '平局 / 双方资源耗尽' });
-              extraActionLogs += '\n[系统] 双方资源耗尽';
+              setResourceDepletedWinnerDetail({ eng: '', chn: '平局：双方资源耗尽' });
+              extraActionLogs += '\n[系统] 平局：双方资源耗尽';
             } else {
-              extraActionLogs += `\n[系统] 公共牌库已空，进入最终对抗\n[玩家] 手牌剩余 ${playerHandCount} 张\n[对手] 手牌剩余 ${aiHandCount} 张`;
+              extraActionLogs += `\n${zhCN.logs.finalClashNoReplenish}\n${zhCN.logs.playerHandRemaining(playerHandCount)}\n${zhCN.logs.aiHandRemaining(aiHandCount)}`;
             }
           }
 
@@ -539,7 +540,7 @@ export default function App() {
       scheduleSettlementTimer(finishTurn, 650);
     };
 
-    const executeDrawQueue = (queue: Array<{ user: 'PLAYER' | 'AI'; count: number }>, index = 0) => {
+    const executeDrawQueue = (queue: DrawQueueItem[], index = 0) => {
       if (index >= queue.length) {
         scheduleSettlementTimer(finishReplenishment, 350);
         return;
@@ -603,39 +604,35 @@ export default function App() {
       const deckCount = latest.drawPile.length;
       const totalNeed = playerNeed + aiNeed;
 
-      if (deckCount <= 0 || totalNeed <= 0) {
+      if (deckCount <= 0) {
+        setLogs(prev => [
+          ...prev,
+          zhCN.logs.finalClashNoReplenish,
+          zhCN.logs.playerHandRemaining(latest.playerHand.length),
+          zhCN.logs.aiHandRemaining(latest.aiHand.length),
+        ]);
+        scheduleSettlementTimer(finishTurn, 350);
+        return;
+      }
+
+      if (totalNeed <= 0) {
         scheduleSettlementTimer(finishReplenishment, 350);
         return;
       }
 
-      const queue: Array<{ user: 'PLAYER' | 'AI'; count: number }> = [];
+      let queue: DrawQueueItem[] = [];
       if (deckCount >= totalNeed) {
         if (playerNeed > 0) queue.push({ user: 'PLAYER', count: playerNeed });
         if (aiNeed > 0) queue.push({ user: 'AI', count: aiNeed });
       } else {
-        let remainingDeck = deckCount;
-        let playerRemaining = playerNeed;
-        let aiRemaining = aiNeed;
         const nextPlayerRole = latest.playerRole === 'HOME' ? 'GUEST' : 'HOME';
-        let turn: 'PLAYER' | 'AI' = nextPlayerRole === 'HOME' ? 'PLAYER' : 'AI';
-
-        while (remainingDeck > 0 && (playerRemaining > 0 || aiRemaining > 0)) {
-          if (turn === 'PLAYER') {
-            if (playerRemaining > 0) {
-              queue.push({ user: 'PLAYER', count: 1 });
-              playerRemaining -= 1;
-              remainingDeck -= 1;
-            }
-            turn = 'AI';
-          } else {
-            if (aiRemaining > 0) {
-              queue.push({ user: 'AI', count: 1 });
-              aiRemaining -= 1;
-              remainingDeck -= 1;
-            }
-            turn = 'PLAYER';
-          }
-        }
+        queue = allocateLimitedSharedDeckDraws({
+          deckCount,
+          playerNeed,
+          aiNeed,
+          nextHomeSide: nextPlayerRole === 'HOME' ? 'PLAYER' : 'AI',
+        });
+        setLogs(prev => [...prev, zhCN.logs.limitedSharedDeck]);
       }
       executeDrawQueue(queue);
     };
@@ -1027,8 +1024,7 @@ export default function App() {
         setHasLoggedDepletion(true);
         setLogs(prev => [
           ...prev,
-          zhCN.logs.sharedDeckDepleted,
-          '[系统] 进入最终交锋'
+          zhCN.logs.sharedDeckDepleted
         ]);
       }
       const timer = setTimeout(() => {
@@ -1050,7 +1046,7 @@ export default function App() {
 
     if (state.drawPile.length === 0 && showDepletedNotification) {
       titleEng = zhCN.phases.deckDepleted;
-      titleChn = "公共牌库耗尽";
+      titleChn = "公共牌库已耗尽，进入最终交锋";
       type = 'red';
       pulse = true;
     }
@@ -1832,17 +1828,25 @@ export default function App() {
                 <div className="absolute w-[46px] h-[66px] bg-zinc-800 border border-zinc-700 rounded-md translate-x-0.5 translate-y-0.5 rotate-3 opacity-60 shadow flex items-center justify-center" />
               )}
               {/* Card 1 (Top) */}
-              <div className="absolute w-[48px] h-[68px] bg-[#1a1c23] border border-slate-500/35 rounded-md flex items-center justify-center shadow-md transition-all">
+              <div className={`absolute w-[48px] h-[68px] bg-[#1a1c23] border rounded-md flex items-center justify-center shadow-md transition-all ${
+                state.drawPile.length === 0
+                  ? 'border-red-500/75 bg-red-950/25 animate-[pulse_1.4s_infinite]'
+                  : 'border-slate-500/35'
+              }`}>
                 <div className="relative w-full h-full flex items-center justify-center">
-                  <ArrowUpDown className="w-4 h-4 text-slate-300/70" />
+                  <ArrowUpDown className={`w-4 h-4 ${state.drawPile.length === 0 ? 'text-red-400' : 'text-slate-300/70'}`} />
                 </div>
               </div>
             </div>
           </div>
           
-          <div className="text-[9px] text-slate-300/85 font-extrabold font-mono tracking-widest mt-2 text-center leading-tight">
-            {zhCN.resources.sharedDeck}
-            <span className="block text-[8px] text-slate-400/80 font-semibold mt-0.5">{zhCN.resources.remainingCards(state.drawPile.length)}</span>
+          <div className={`text-[9px] font-extrabold font-mono tracking-widest mt-2 text-center leading-tight ${
+            state.drawPile.length === 0 ? 'text-red-400 animate-[pulse_1.4s_infinite]' : 'text-slate-300/85'
+          }`}>
+            {state.drawPile.length === 0 ? zhCN.resources.depleted : zhCN.resources.sharedDeck}
+            <span className={`block text-[8px] font-semibold mt-0.5 ${
+              state.drawPile.length === 0 ? 'text-red-400/85' : 'text-slate-400/80'
+            }`}>{zhCN.resources.remainingCards(state.drawPile.length)}</span>
           </div>
         </div>
 
@@ -1914,6 +1918,7 @@ export default function App() {
               <button 
                 onClick={onStartRerollMode}
                 disabled={playerHasRerolledThisTurn || !isPlayerTurnState || isProcessing || state.drawPile.length === 0}
+                title={state.drawPile.length === 0 ? zhCN.notices.rerollDeckEmpty : undefined}
                 className="w-[180px] h-[40px] rounded-lg font-bold text-white bg-[#2d2d35]/50 border border-zinc-800/40 tracking-wider transition-all duration-200 hover:bg-zinc-700 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:bg-[#1a1a20]/60 disabled:text-text-dim/20 disabled:border disabled:border-zinc-800/40 flex flex-col items-center justify-center leading-tight shadow-md"
               >
                 <span className="text-[11px] font-black tracking-wider">

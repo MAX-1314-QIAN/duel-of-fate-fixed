@@ -11,6 +11,9 @@ export const getMutationCandidates = (hand: Card[]) =>
 export const countMutatedCards = (hand: Card[]) =>
   hand.filter(card => card.mutationType === 'VOLCANO').length;
 
+export const getVolcanoMutationBonus = (damagingCards: Card[]) =>
+  damagingCards.filter(card => card.mutationType === 'VOLCANO').length;
+
 export const canTriggerMutation = (sharedDeckCount: number, mutationCount: number) =>
   sharedDeckCount > 0 && mutationCount >= MUTATION_INTERVAL_ROUNDS;
 

@@ -4,6 +4,15 @@ import { ArrowUp, ArrowDown, ArrowUpDown, Sword, RotateCcw, User, Cpu, ChevronRi
 import { Card, CardType, GameState, WIN_MAP } from './types';
 import { zhCN } from './locales/zh-CN';
 import { allocateLimitedSharedDeckDraws, DrawQueueItem } from './game/sharedDeck';
+import {
+  MUTATION_INTERVAL_ROUNDS,
+  MUTATION_LIMIT,
+  applyMutationToCard,
+  canTriggerMutation,
+  countMutatedCards,
+  getMutationCandidates,
+  selectAiMutationCandidate,
+} from './game/environment';
 
 const INITIAL_HP = 10;
 const MAX_HAND = 4;
@@ -71,6 +80,7 @@ export default function App() {
   }, [state]);
 
   const settlementTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const continueAfterMutationRef = useRef<(() => void) | null>(null);
   const clearSettlementTimers = useCallback(() => {
     settlementTimersRef.current.forEach(timer => clearTimeout(timer));
     settlementTimersRef.current = [];
@@ -100,6 +110,8 @@ export default function App() {
   const [showDepletedNotification, setShowDepletedNotification] = useState<boolean>(false);
   const [hasLoggedDepletion, setHasLoggedDepletion] = useState<boolean>(false);
   const [resourceDepletedWinnerDetail, setResourceDepletedWinnerDetail] = useState<{ eng: string; chn: string } | null>(null);
+  const [completedClashesSinceMutation, setCompletedClashesSinceMutation] = useState(0);
+  const [mutationCandidates, setMutationCandidates] = useState<Card[]>([]);
   
   // Custom feedback states
   const [playerDiscardPrompt, setPlayerDiscardPrompt] = useState<string | null>(null);
@@ -333,6 +345,9 @@ export default function App() {
     setShowDepletedNotification(false);
     setHasLoggedDepletion(false);
     setResourceDepletedWinnerDetail(null);
+    setCompletedClashesSinceMutation(0);
+    setMutationCandidates([]);
+    continueAfterMutationRef.current = null;
     setPlayerDiscardPrompt(null);
     setAiDiscardPrompt(null);
     setSharedDeckPrompt(null);
@@ -348,6 +363,53 @@ export default function App() {
     setScreen('HOME');
     setSelectedProtocol(null);
   };
+
+  const finishMutationStage = useCallback((playerCardId?: string) => {
+    setState(prev => {
+      const logsToAppend: string[] = [];
+      const playerHand = playerCardId
+        ? prev.playerHand.map(applyMutationToCard(playerCardId, 'VOLCANO'))
+        : prev.playerHand;
+
+      if (playerCardId) {
+        logsToAppend.push('[玩家] 获得 1 张火山异变牌');
+      }
+
+      let aiHand = prev.aiHand;
+      if (countMutatedCards(aiHand) >= MUTATION_LIMIT) {
+        logsToAppend.push('[环境事件] 对手异变牌已达上限，本次感染跳过');
+      } else {
+        const aiCandidates = getMutationCandidates(aiHand);
+        const selectedAiCard = selectAiMutationCandidate(aiCandidates, aiHand);
+        if (selectedAiCard) {
+          aiHand = aiHand.map(applyMutationToCard(selectedAiCard.id, 'VOLCANO'));
+          logsToAppend.push('[环境事件] 对手获得 1 张火山异变牌');
+        }
+      }
+
+      if (logsToAppend.length > 0) {
+        setLogs(logPrev => [...logPrev, ...logsToAppend]);
+      }
+
+      return {
+        ...prev,
+        playerHand,
+        aiHand,
+      };
+    });
+
+    setMutationCandidates([]);
+    const continueTurn = continueAfterMutationRef.current;
+    continueAfterMutationRef.current = null;
+    if (continueTurn) {
+      scheduleSettlementTimer(continueTurn, 300);
+    }
+  }, [scheduleSettlementTimer]);
+
+  const handleMutationPick = useCallback((cardId: string) => {
+    if (!mutationCandidates.some(card => card.id === cardId)) return;
+    finishMutationStage(cardId);
+  }, [finishMutationStage, mutationCandidates]);
 
   // --- SETTLEMENT LOGIC ---
   const handleSettlement = useCallback((hCards: Card[], gCards: Card[]) => {
@@ -537,7 +599,44 @@ export default function App() {
     const finishReplenishment = () => {
       setSettlementSubPhase('replenish-complete');
       setLogs(prev => [...prev, zhCN.logs.replenishComplete]);
-      scheduleSettlementTimer(finishTurn, 650);
+      scheduleSettlementTimer(() => {
+        const latest = stateRef.current;
+        const nextMutationCount = completedClashesSinceMutation + 1;
+
+        if (latest.drawPile.length <= 0) {
+          setLogs(prev => [...prev, '[环境事件] 公共牌库已耗尽，感染阶段关闭']);
+          scheduleSettlementTimer(finishTurn, 350);
+          return;
+        }
+
+        if (!canTriggerMutation(latest.drawPile.length, nextMutationCount)) {
+          setCompletedClashesSinceMutation(nextMutationCount);
+          const roundsRemaining = MUTATION_INTERVAL_ROUNDS - nextMutationCount;
+          if (roundsRemaining === 1) {
+            setLogs(prev => [...prev, '[环境事件] 火山感染将在 1 轮后触发']);
+          }
+          scheduleSettlementTimer(finishTurn, 350);
+          return;
+        }
+
+        setCompletedClashesSinceMutation(0);
+        setLogs(prev => [...prev, '[环境事件] 火山感染已触发']);
+        continueAfterMutationRef.current = finishTurn;
+
+        if (countMutatedCards(latest.playerHand) >= MUTATION_LIMIT) {
+          setLogs(prev => [...prev, '[环境事件] 我方异变牌已达上限，本次感染跳过']);
+          finishMutationStage();
+          return;
+        }
+
+        const playerCandidates = getMutationCandidates(latest.playerHand);
+        if (playerCandidates.length === 0) {
+          finishMutationStage();
+          return;
+        }
+
+        setMutationCandidates(playerCandidates);
+      }, 650);
     };
 
     const executeDrawQueue = (queue: DrawQueueItem[], index = 0) => {
@@ -608,6 +707,7 @@ export default function App() {
         setLogs(prev => [
           ...prev,
           zhCN.logs.finalClashNoReplenish,
+          '[环境事件] 公共牌库已耗尽，感染阶段关闭',
           zhCN.logs.playerHandRemaining(latest.playerHand.length),
           zhCN.logs.aiHandRemaining(latest.aiHand.length),
         ]);
@@ -691,7 +791,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [addAnimation, clearSettlementTimers, scheduleSettlementTimer, triggerDeckFeedback]);
+  }, [addAnimation, clearSettlementTimers, completedClashesSinceMutation, finishMutationStage, scheduleSettlementTimer, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -1007,6 +1107,11 @@ export default function App() {
   };
 
   const isPlayerTurnState = (state.phase === 'PLAYER_ATTACK' || state.phase === 'PLAYER_DEFEND') && !isProcessing;
+  const playerMutationCount = countMutatedCards(state.playerHand);
+  const aiMutationCount = countMutatedCards(state.aiHand);
+  const mutationRoundsRemaining = state.drawPile.length === 0
+    ? 0
+    : MUTATION_INTERVAL_ROUNDS - completedClashesSinceMutation;
 
   useEffect(() => {
     if (state.phase === 'PLAYER_ATTACK' || state.phase === 'PLAYER_DEFEND') {
@@ -1501,9 +1606,18 @@ export default function App() {
             </motion.div>
           ) : (
             <div key="battle" className="flex flex-col gap-6 items-center relative">
+              <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-[260px] rounded-md border border-red-500/25 bg-[#140a0a]/80 px-3 py-2 text-center font-mono shadow-[0_0_14px_rgba(239,68,68,0.12)]">
+                <div className="text-[11px] font-black tracking-widest text-red-300">🔥 火山事件</div>
+                <div className="text-[10px] font-semibold text-red-100/75 mt-0.5">
+                  下一次感染：{mutationRoundsRemaining} 轮后
+                </div>
+              </div>
 
               {/* AI Battle Slot */}
               <div className="flex gap-4 min-h-[140px] items-center">
+                <div className="absolute -right-28 top-10 text-[10px] font-mono font-bold text-red-300/80 tracking-wider">
+                  对手异变牌：{aiMutationCount} / {MUTATION_LIMIT}
+                </div>
                 {(state.aiRole === 'HOME' ? state.homePlayed : state.guestPlayed).length > 0 ? (
                   (state.aiRole === 'HOME' ? state.homePlayed : state.guestPlayed).map(c => (
                     <BattleCard 
@@ -1852,6 +1966,9 @@ export default function App() {
 
         {/* CENTER COLUMN: ACTIVE HAND CARDS & CONTROL BUTTONS */}
         <div className="flex-1 flex flex-col items-center justify-center gap-5">
+          <div className="text-[10px] font-mono font-bold text-red-300/80 tracking-wider leading-none">
+            我方异变牌：{playerMutationCount} / {MUTATION_LIMIT}
+          </div>
           <div className="flex gap-4 min-h-[120px] items-center">
             {state.playerHand.length === 0 ? (
               <div className="flex flex-col items-center justify-center font-mono text-center border border-dashed border-red-500/20 px-8 py-4 rounded-xl bg-red-950/20 shadow-[0_0_12px_rgba(239,68,68,0.15)] animate-[pulse_2s_infinite]">
@@ -1899,6 +2016,11 @@ export default function App() {
                     <div className="text-[10px] font-bold tracking-wider text-text-dim">
                       {cardLabel(card.type)}
                     </div>
+                    {card.mutationType === 'VOLCANO' && (
+                      <div className="absolute top-1.5 right-1.5 rounded bg-red-950/90 border border-red-500/45 px-1.5 py-0.5 text-[8px] font-black text-red-300 leading-none">
+                        火山
+                      </div>
+                    )}
                   </motion.div>
                 );
               })
@@ -2051,6 +2173,37 @@ export default function App() {
             <span className="text-sm">⚠️</span>
             <span className="font-bold">{shortNotice}</span>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Volcano mutation selection */}
+      <AnimatePresence>
+        {mutationCandidates.length > 0 && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-[140]">
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="w-[360px] rounded-xl border border-red-500/40 bg-[#120b0b]/95 p-5 shadow-2xl font-mono text-center"
+            >
+              <h3 className="text-red-300 text-sm font-black tracking-widest">火山感染</h3>
+              <p className="mt-1 text-[11px] text-red-100/75 font-semibold">请选择 1 张手牌进行异变</p>
+              <div className="mt-5 flex items-center justify-center gap-4">
+                {mutationCandidates.map(card => (
+                  <button
+                    key={card.id}
+                    onClick={() => handleMutationPick(card.id)}
+                    className={`w-[90px] h-[120px] rounded-xl bg-surface border border-red-500/35 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-red-300 hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
+                  >
+                    <CardIcon type={card.type} className="text-4xl mb-2" />
+                    <div className="text-[10px] font-bold tracking-wider text-text-dim">
+                      {cardLabel(card.type)}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -2245,6 +2398,11 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
     >
       <CardIcon type={card.type} className="text-3xl mb-1" />
       <span className="text-[9px] font-black tracking-widest opacity-40">{cardLabel(card.type)}</span>
+      {card.mutationType === 'VOLCANO' && (
+        <div className="absolute top-1.5 right-1.5 rounded bg-red-950/90 border border-red-500/45 px-1.5 py-0.5 text-[8px] font-black text-red-300 leading-none">
+          火山
+        </div>
+      )}
     </motion.div>
   );
 }

@@ -1,8 +1,10 @@
 export type CardType = 'ROCK' | 'PAPER' | 'SCISSORS';
+export type MutationType = 'VOLCANO';
 
 export interface Card {
   id: string;
   type: CardType;
+  mutationType?: MutationType;
 }
 
 export type PlayerRole = 'HOME' | 'GUEST';

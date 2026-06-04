@@ -1,7 +1,18 @@
 import { Card, CardType, MutationType } from '../types';
 
-export const MUTATION_LIMIT = 3;
-export const MUTATION_INTERVAL_ROUNDS = 2;
+export const VOLCANO_ENVIRONMENT_CONFIG = {
+  id: 'VOLCANO',
+  name: '火山事件',
+  icon: '🔥',
+  mutationIntervalRounds: 2,
+  maxMutationCardsPerSide: 3,
+  maxMutationDamageBonusPerClash: 2,
+  resonanceRequiredCards: 2,
+  resonanceBonusDamage: 1,
+} as const;
+
+export const MUTATION_LIMIT = VOLCANO_ENVIRONMENT_CONFIG.maxMutationCardsPerSide;
+export const MUTATION_INTERVAL_ROUNDS = VOLCANO_ENVIRONMENT_CONFIG.mutationIntervalRounds;
 
 const shuffleCards = (cards: Card[]) => [...cards].sort(() => Math.random() - 0.5);
 
@@ -19,7 +30,33 @@ export const countMutatedCards = (hand: Card[]) =>
   hand.filter(card => card.mutationType === 'VOLCANO').length;
 
 export const calculateVolcanoMutationBonus = (successfulVolcanoHits: number) =>
-  Math.min(successfulVolcanoHits, 2);
+  Math.min(successfulVolcanoHits, VOLCANO_ENVIRONMENT_CONFIG.maxMutationDamageBonusPerClash);
+
+export const calculateVolcanoDamage = ({
+  baseDamage,
+  successfulVolcanoHits,
+  playedVolcanoCards,
+}: {
+  baseDamage: number;
+  successfulVolcanoHits: number;
+  playedVolcanoCards: number;
+}) => {
+  const mutationBonus = calculateVolcanoMutationBonus(successfulVolcanoHits);
+  const resonanceTriggered =
+    playedVolcanoCards >= VOLCANO_ENVIRONMENT_CONFIG.resonanceRequiredCards
+    && successfulVolcanoHits >= 1;
+  const resonanceBonus = resonanceTriggered
+    ? VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage
+    : 0;
+
+  return {
+    baseDamage,
+    mutationBonus,
+    resonanceTriggered,
+    resonanceBonus,
+    totalDamage: baseDamage + mutationBonus + resonanceBonus,
+  };
+};
 
 export const getVolcanoMutationBonus = (damagingCards: Card[]) =>
   calculateVolcanoMutationBonus(
@@ -36,7 +73,11 @@ export const getVolcanoResonanceBonus = ({
   const playedVolcanoCount = playedCards.filter(card => card.mutationType === 'VOLCANO').length;
   const damagingVolcanoCount = damagingCards.filter(card => card.mutationType === 'VOLCANO').length;
 
-  return playedVolcanoCount >= 2 && damagingVolcanoCount >= 1 ? 1 : 0;
+  return calculateVolcanoDamage({
+    baseDamage: damagingCards.length,
+    successfulVolcanoHits: damagingVolcanoCount,
+    playedVolcanoCards: playedVolcanoCount,
+  }).resonanceBonus;
 };
 
 export const canTriggerMutation = (sharedDeckCount: number, mutationCount: number) =>

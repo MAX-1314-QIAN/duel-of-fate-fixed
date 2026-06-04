@@ -7,12 +7,12 @@ import { allocateLimitedSharedDeckDraws, DrawQueueItem } from './game/sharedDeck
 import {
   MUTATION_INTERVAL_ROUNDS,
   MUTATION_LIMIT,
+  VOLCANO_ENVIRONMENT_CONFIG,
   applyMutationToCard,
+  calculateVolcanoDamage,
   canTriggerMutation,
   countMutatedCards,
   getMutationCandidates,
-  getVolcanoMutationBonus,
-  getVolcanoResonanceBonus,
   selectAiMutationCandidate,
 } from './game/environment';
 
@@ -51,7 +51,7 @@ const buildVolcanoDamageLog = (damagingCards: Card[], volcanoBonus: number) => {
   const volcanoCards = damagingCards.filter(card => card.mutationType === 'VOLCANO');
 
   if (volcanoCards.length === 1) {
-    return '[火山异变] 附加伤害：+1';
+    return `[火山异变] 附加伤害：+${Math.min(1, VOLCANO_ENVIRONMENT_CONFIG.maxMutationDamageBonusPerClash)}`;
   }
 
   if (volcanoCards.length > volcanoBonus) {
@@ -450,6 +450,8 @@ export default function App() {
             setMutationAnimation(null);
             setAiMutationCountPulse(false);
           }, 620);
+        } else {
+          logsToAppend.push('[环境事件] 当前没有可感染的普通牌');
         }
       }
 
@@ -576,23 +578,29 @@ export default function App() {
       }
     }
 
-    const guestVolcanoBonus = getVolcanoMutationBonus(guestDamagingCards);
-    hDamage += guestVolcanoBonus;
-    const guestResonanceBonus = getVolcanoResonanceBonus({
-      playedCards: gCards,
-      damagingCards: guestDamagingCards,
+    const guestVolcanoHits = guestDamagingCards.filter(card => card.mutationType === 'VOLCANO').length;
+    const guestPlayedVolcanoCards = gCards.filter(card => card.mutationType === 'VOLCANO').length;
+    const guestVolcanoDamage = calculateVolcanoDamage({
+      baseDamage: guestDamagingCards.length,
+      successfulVolcanoHits: guestVolcanoHits,
+      playedVolcanoCards: guestPlayedVolcanoCards,
     });
-    hDamage += guestResonanceBonus;
+    const guestVolcanoBonus = guestVolcanoDamage.mutationBonus;
+    const guestResonanceBonus = guestVolcanoDamage.resonanceBonus;
+    hDamage += guestVolcanoDamage.mutationBonus + guestVolcanoDamage.resonanceBonus;
 
     const baseHomeDamage = finalHomeAttack.length;
-    const homeVolcanoBonus = getVolcanoMutationBonus(finalHomeAttack);
-    const homeResonanceBonus = getVolcanoResonanceBonus({
-      playedCards: hCards,
-      damagingCards: finalHomeAttack,
+    const homeVolcanoHits = finalHomeAttack.filter(card => card.mutationType === 'VOLCANO').length;
+    const homePlayedVolcanoCards = hCards.filter(card => card.mutationType === 'VOLCANO').length;
+    const homeVolcanoDamage = calculateVolcanoDamage({
+      baseDamage: baseHomeDamage,
+      successfulVolcanoHits: homeVolcanoHits,
+      playedVolcanoCards: homePlayedVolcanoCards,
     });
+    const homeVolcanoBonus = homeVolcanoDamage.mutationBonus;
+    const homeResonanceBonus = homeVolcanoDamage.resonanceBonus;
     gDamage = baseHomeDamage;
-    gDamage += homeVolcanoBonus;
-    gDamage += homeResonanceBonus;
+    gDamage += homeVolcanoDamage.mutationBonus + homeVolcanoDamage.resonanceBonus;
 
     for (const hCard of finalHomeAttack) {
       matches.push({
@@ -633,7 +641,7 @@ export default function App() {
       resultLogs.push(`[伤害] 基础伤害：${baseDamage}`);
       const volcanoLog = buildVolcanoDamageLog(damagingCards, volcanoBonus);
       if (volcanoLog) resultLogs.push(volcanoLog);
-      if (resonanceBonus > 0) resultLogs.push('[羁绊] 触发“灼烧共鸣”：+1');
+      if (resonanceBonus > 0) resultLogs.push(`[羁绊] 触发“灼烧共鸣”：+${VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage}`);
       resultLogs.push(`[结算] 最终伤害：${totalDamage}`);
       if (resonanceBonus > 0) {
         resultLogs.push(`[伤害] 基础 ${baseDamage} + 火山异变 ${volcanoBonus} + 灼烧共鸣 ${resonanceBonus} = ${totalDamage}`);
@@ -649,11 +657,11 @@ export default function App() {
     const guestTarget = aiRoleAtClash === 'HOME' ? '对手' : '玩家';
     if (homeResonanceBonus > 0) {
       resultLogs.push(`[羁绊] ${homeUser}触发“灼烧共鸣”`);
-      resultLogs.push(`[灼烧] ${homeTarget}额外受到 1 点伤害`);
+      resultLogs.push(`[灼烧] ${homeTarget}额外受到 ${VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage} 点伤害`);
     }
     if (guestResonanceBonus > 0) {
       resultLogs.push(`[羁绊] ${guestUser}触发“灼烧共鸣”`);
-      resultLogs.push(`[灼烧] ${guestTarget}额外受到 1 点伤害`);
+      resultLogs.push(`[灼烧] ${guestTarget}额外受到 ${VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage} 点伤害`);
     }
     if (aiDamage > 0) {
       appendDamageBreakdownLogs(aiBaseDamage, aiVolcanoDamage, aiResonanceDamage, aiDamage, aiRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
@@ -816,6 +824,7 @@ export default function App() {
 
         const playerCandidates = getMutationCandidates(latest.playerHand);
         if (playerCandidates.length === 0) {
+          setLogs(prev => [...prev, '[环境事件] 当前没有可感染的普通牌']);
           finishMutationStage();
           return;
         }
@@ -1711,9 +1720,9 @@ export default function App() {
                 transition={{ duration: 0.72, ease: 'easeOut' }}
                 className="absolute left-2 -top-1 rounded-md border border-orange-500/35 bg-black/75 px-2 py-1 font-mono text-[11px] font-black text-orange-300 shadow-[0_0_18px_rgba(249,115,22,0.25)] pointer-events-none"
               >
-                🔥 灼烧共鸣 -1
-                <span className="absolute -right-3 top-2 text-[10px] opacity-80">🔥</span>
-                <span className="absolute right-5 -top-2 text-[8px] opacity-60">🔥</span>
+                {VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣 -{VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage}
+                <span className="absolute -right-3 top-2 text-[10px] opacity-80">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
+                <span className="absolute right-5 -top-2 text-[8px] opacity-60">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1747,9 +1756,9 @@ export default function App() {
                 transition={{ duration: 0.72, ease: 'easeOut' }}
                 className="absolute right-2 -top-1 rounded-md border border-orange-500/35 bg-black/75 px-2 py-1 font-mono text-[11px] font-black text-orange-300 shadow-[0_0_18px_rgba(249,115,22,0.25)] pointer-events-none"
               >
-                🔥 灼烧共鸣 -1
-                <span className="absolute -left-3 top-2 text-[10px] opacity-80">🔥</span>
-                <span className="absolute left-5 -top-2 text-[8px] opacity-60">🔥</span>
+                {VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣 -{VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage}
+                <span className="absolute -left-3 top-2 text-[10px] opacity-80">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
+                <span className="absolute left-5 -top-2 text-[8px] opacity-60">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1862,8 +1871,8 @@ export default function App() {
             <div key="battle" className="flex flex-col gap-6 items-center relative">
               <div className={`volcano-event-panel absolute -top-16 left-1/2 -translate-x-1/2 w-[250px] rounded-md border border-orange-500/25 bg-[#120d0a]/82 px-3 py-2 text-center font-mono shadow-[0_0_14px_rgba(249,115,22,0.10)] ${mutationEventPulse ? 'volcano-event-panel--pulse' : ''}`}>
                 <div className="flex items-center justify-center gap-1.5 text-[11px] font-black tracking-widest text-orange-200">
-                  <span className="text-[12px]" aria-hidden="true">🔥</span>
-                  <span>火山事件</span>
+                  <span className="text-[12px]" aria-hidden="true">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
+                  <span>{VOLCANO_ENVIRONMENT_CONFIG.name}</span>
                 </div>
                 <div className="text-[10px] font-semibold text-orange-100/70 mt-0.5">
                   {mutationEventStatus}
@@ -2342,8 +2351,8 @@ export default function App() {
           <div className="flex gap-4">
             {showResonancePreview && (
               <div className="absolute bottom-[84px] left-1/2 -translate-x-1/2 w-[220px] max-h-[44px] rounded-md border border-orange-500/25 bg-[#130b08]/88 px-2.5 py-1.5 text-center font-mono shadow-[0_0_12px_rgba(249,115,22,0.10)] pointer-events-none">
-                <div className="text-[9.5px] font-black tracking-widest text-orange-200 leading-tight">🔥 灼烧共鸣已激活</div>
-                <div className="mt-0.5 text-[8px] font-semibold text-orange-100/60 leading-tight">火山牌命中后额外造成 1 点伤害</div>
+                <div className="text-[9.5px] font-black tracking-widest text-orange-200 leading-tight">{VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣已激活</div>
+                <div className="mt-0.5 text-[8px] font-semibold text-orange-100/60 leading-tight">火山牌命中后额外造成 {VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage} 点伤害</div>
               </div>
             )}
             {/* BUTTON 1: LEFT BUTTON */}
@@ -2654,14 +2663,14 @@ export default function App() {
             >
               <div className="absolute left-1/2 top-[330px] h-[2px] w-[180px] -translate-x-1/2 bg-gradient-to-r from-transparent via-orange-400/80 to-transparent shadow-[0_0_18px_rgba(249,115,22,0.55)]" />
               <div className="absolute left-1/2 top-[292px] -translate-x-1/2 rounded-full border border-orange-500/35 bg-[#180904]/90 px-4 py-2 text-center font-mono shadow-[0_0_28px_rgba(249,115,22,0.28)]">
-                <div className="text-[12px] font-black tracking-widest text-orange-200">🔥 灼烧共鸣</div>
+                <div className="text-[12px] font-black tracking-widest text-orange-200">{VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣</div>
               </div>
               <div className={`absolute ${resonanceAnimation.target === 'AI' ? 'left-[610px] top-[104px] text-orange-300' : 'left-[610px] bottom-[132px] text-red-300'} rounded-md border border-orange-500/30 bg-black/70 px-2 py-1 font-mono text-[12px] font-black shadow-[0_0_18px_rgba(249,115,22,0.2)]`}>
                 灼烧 -1
               </div>
-              <span className="absolute left-[45%] top-[315px] text-[12px] drop-shadow-[0_0_8px_rgba(251,146,60,0.8)]">🔥</span>
-              <span className="absolute left-[52%] top-[338px] text-[10px] opacity-80 drop-shadow-[0_0_8px_rgba(251,146,60,0.7)]">🔥</span>
-              <span className="absolute left-[49%] top-[358px] text-[9px] opacity-70 drop-shadow-[0_0_8px_rgba(251,146,60,0.7)]">🔥</span>
+              <span className="absolute left-[45%] top-[315px] text-[12px] drop-shadow-[0_0_8px_rgba(251,146,60,0.8)]">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
+              <span className="absolute left-[52%] top-[338px] text-[10px] opacity-80 drop-shadow-[0_0_8px_rgba(251,146,60,0.7)]">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
+              <span className="absolute left-[49%] top-[358px] text-[9px] opacity-70 drop-shadow-[0_0_8px_rgba(251,146,60,0.7)]">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
             </motion.div>
           )}
         </AnimatePresence>

@@ -12,6 +12,7 @@ import {
   countMutatedCards,
   getMutationCandidates,
   getVolcanoMutationBonus,
+  getVolcanoResonanceBonus,
   selectAiMutationCandidate,
 } from './game/environment';
 
@@ -50,10 +51,14 @@ const buildVolcanoDamageLog = (damagingCards: Card[], volcanoBonus: number) => {
   const volcanoCards = damagingCards.filter(card => card.mutationType === 'VOLCANO');
 
   if (volcanoCards.length === 1) {
-    return `[火山异变] ${volcanoCardLabel(volcanoCards[0].type)}额外造成 1 点伤害`;
+    return '[火山异变] 附加伤害：+1';
   }
 
-  return `[火山异变] ${volcanoCards.length} 张火山牌额外造成 ${volcanoBonus} 点伤害`;
+  if (volcanoCards.length > volcanoBonus) {
+    return `[火山异变] 成功命中 ${volcanoCards.length} 张，附加伤害上限生效：+${volcanoBonus}`;
+  }
+
+  return `[火山异变] 附加伤害：+${volcanoBonus}`;
 };
 
 const CardIcon = ({ type, className }: { type: CardType; className?: string }) => {
@@ -139,6 +144,8 @@ export default function App() {
   const [mutatedCardGlowIds, setMutatedCardGlowIds] = useState<Record<string, boolean>>({});
   const [playerMutationCountPulse, setPlayerMutationCountPulse] = useState(false);
   const [aiMutationCountPulse, setAiMutationCountPulse] = useState(false);
+  const [resonanceAnimation, setResonanceAnimation] = useState<{ source: 'PLAYER' | 'AI'; target: 'PLAYER' | 'AI'; token: number } | null>(null);
+  const [burnFeedback, setBurnFeedback] = useState<{ targets: Array<'PLAYER' | 'AI'>; token: number } | null>(null);
   
   // Custom feedback states
   const [playerDiscardPrompt, setPlayerDiscardPrompt] = useState<string | null>(null);
@@ -380,6 +387,8 @@ export default function App() {
     setMutatedCardGlowIds({});
     setPlayerMutationCountPulse(false);
     setAiMutationCountPulse(false);
+    setResonanceAnimation(null);
+    setBurnFeedback(null);
     continueAfterMutationRef.current = null;
     setPlayerDiscardPrompt(null);
     setAiDiscardPrompt(null);
@@ -569,11 +578,21 @@ export default function App() {
 
     const guestVolcanoBonus = getVolcanoMutationBonus(guestDamagingCards);
     hDamage += guestVolcanoBonus;
+    const guestResonanceBonus = getVolcanoResonanceBonus({
+      playedCards: gCards,
+      damagingCards: guestDamagingCards,
+    });
+    hDamage += guestResonanceBonus;
 
     const baseHomeDamage = finalHomeAttack.length;
     const homeVolcanoBonus = getVolcanoMutationBonus(finalHomeAttack);
+    const homeResonanceBonus = getVolcanoResonanceBonus({
+      playedCards: hCards,
+      damagingCards: finalHomeAttack,
+    });
     gDamage = baseHomeDamage;
     gDamage += homeVolcanoBonus;
+    gDamage += homeResonanceBonus;
 
     for (const hCard of finalHomeAttack) {
       matches.push({
@@ -588,33 +607,79 @@ export default function App() {
     const baseGuestDamage = guestDamagingCards.length;
     const baseDamageToHome = baseGuestDamage;
     const volcanoDamageToHome = guestVolcanoBonus;
+    const resonanceDamageToHome = guestResonanceBonus;
     const baseDamageToGuest = baseHomeDamage;
     const volcanoDamageToGuest = homeVolcanoBonus;
+    const resonanceDamageToGuest = homeResonanceBonus;
     const playerDamage = playerRoleAtClash === 'HOME' ? hDamage : gDamage;
     const aiDamage = aiRoleAtClash === 'HOME' ? hDamage : gDamage;
     const playerBaseDamage = playerRoleAtClash === 'HOME' ? baseDamageToHome : baseDamageToGuest;
     const aiBaseDamage = aiRoleAtClash === 'HOME' ? baseDamageToHome : baseDamageToGuest;
     const playerVolcanoDamage = playerRoleAtClash === 'HOME' ? volcanoDamageToHome : volcanoDamageToGuest;
     const aiVolcanoDamage = aiRoleAtClash === 'HOME' ? volcanoDamageToHome : volcanoDamageToGuest;
+    const playerResonanceDamage = playerRoleAtClash === 'HOME' ? resonanceDamageToHome : resonanceDamageToGuest;
+    const aiResonanceDamage = aiRoleAtClash === 'HOME' ? resonanceDamageToHome : resonanceDamageToGuest;
     const resolvedPlayerHP = Math.max(0, clashSnapshot.playerHP - playerDamage);
     const resolvedAiHP = Math.max(0, clashSnapshot.aiHP - aiDamage);
 
-    const appendDamageBreakdownLogs = (baseDamage: number, volcanoBonus: number, totalDamage: number, damagingCards: Card[]) => {
+    const appendDamageBreakdownLogs = (
+      baseDamage: number,
+      volcanoBonus: number,
+      resonanceBonus: number,
+      totalDamage: number,
+      damagingCards: Card[],
+    ) => {
       if (totalDamage <= 0) return;
       resultLogs.push(`[伤害] 基础伤害：${baseDamage}`);
       const volcanoLog = buildVolcanoDamageLog(damagingCards, volcanoBonus);
       if (volcanoLog) resultLogs.push(volcanoLog);
-      resultLogs.push(`[伤害] 最终伤害：${totalDamage}`);
+      if (resonanceBonus > 0) resultLogs.push('[羁绊] 触发“灼烧共鸣”：+1');
+      resultLogs.push(`[结算] 最终伤害：${totalDamage}`);
+      if (resonanceBonus > 0) {
+        resultLogs.push(`[伤害] 基础 ${baseDamage} + 火山异变 ${volcanoBonus} + 灼烧共鸣 ${resonanceBonus} = ${totalDamage}`);
+      } else if (volcanoBonus > 0) {
+        resultLogs.push(`[伤害] 基础 ${baseDamage} + 火山异变 ${volcanoBonus} = ${totalDamage}`);
+      }
     };
 
     if (gCards.length === 0) resultLogs.push(zhCN.logs.noDefense);
+    const homeUser = playerRoleAtClash === 'HOME' ? '玩家' : '对手';
+    const guestUser = playerRoleAtClash === 'GUEST' ? '玩家' : '对手';
+    const homeTarget = aiRoleAtClash === 'GUEST' ? '对手' : '玩家';
+    const guestTarget = aiRoleAtClash === 'HOME' ? '对手' : '玩家';
+    if (homeResonanceBonus > 0) {
+      resultLogs.push(`[羁绊] ${homeUser}触发“灼烧共鸣”`);
+      resultLogs.push(`[灼烧] ${homeTarget}额外受到 1 点伤害`);
+    }
+    if (guestResonanceBonus > 0) {
+      resultLogs.push(`[羁绊] ${guestUser}触发“灼烧共鸣”`);
+      resultLogs.push(`[灼烧] ${guestTarget}额外受到 1 点伤害`);
+    }
     if (aiDamage > 0) {
-      appendDamageBreakdownLogs(aiBaseDamage, aiVolcanoDamage, aiDamage, aiRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
+      appendDamageBreakdownLogs(aiBaseDamage, aiVolcanoDamage, aiResonanceDamage, aiDamage, aiRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
       resultLogs.push(zhCN.logs.aiDamage(aiDamage));
     }
     if (playerDamage > 0) {
-      appendDamageBreakdownLogs(playerBaseDamage, playerVolcanoDamage, playerDamage, playerRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
+      appendDamageBreakdownLogs(playerBaseDamage, playerVolcanoDamage, playerResonanceDamage, playerDamage, playerRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
       resultLogs.push(zhCN.logs.playerDamage(playerDamage));
+    }
+    if (homeResonanceBonus > 0 || guestResonanceBonus > 0) {
+      const burnTargets = [
+        ...(homeResonanceBonus > 0 ? [homeTarget === '玩家' ? 'PLAYER' as const : 'AI' as const] : []),
+        ...(guestResonanceBonus > 0 ? [guestTarget === '玩家' ? 'PLAYER' as const : 'AI' as const] : []),
+      ];
+      const source = homeResonanceBonus > 0 ? homeUser : guestUser;
+      const target = homeResonanceBonus > 0 ? homeTarget : guestTarget;
+      setBurnFeedback({ targets: burnTargets, token: Date.now() });
+      setResonanceAnimation({
+        source: source === '玩家' ? 'PLAYER' : 'AI',
+        target: target === '玩家' ? 'PLAYER' : 'AI',
+        token: Date.now(),
+      });
+      scheduleSettlementTimer(() => {
+        setResonanceAnimation(null);
+        setBurnFeedback(null);
+      }, 780);
     }
     setLogs(prev => [...prev, ...resultLogs]);
 
@@ -634,6 +699,10 @@ export default function App() {
       aiBaseDamage,
       playerVolcanoDamage,
       aiVolcanoDamage,
+      playerResonanceDamage,
+      aiResonanceDamage,
+      homeResonanceBonus,
+      guestResonanceBonus,
       noDefense: gCards.length === 0,
     });
 
@@ -755,7 +824,12 @@ export default function App() {
       }, 650);
     };
 
-    const executeDrawQueue = (queue: DrawQueueItem[], index = 0) => {
+    type DrawQueueSnapshotItem = DrawQueueItem & {
+      beforeCount: number;
+      afterCount: number;
+    };
+
+    const executeDrawQueue = (queue: DrawQueueSnapshotItem[], index = 0) => {
       if (index >= queue.length) {
         scheduleSettlementTimer(finishReplenishment, 350);
         return;
@@ -766,10 +840,10 @@ export default function App() {
         const drawCount = Math.min(action.count, prev.drawPile.length);
         if (drawCount <= 0) return prev;
 
-        const beforeDeckCount = prev.drawPile.length;
+        const beforeDeckCount = action.beforeCount;
         const drawnCards = prev.drawPile.slice(0, drawCount);
         const nextDrawPile = prev.drawPile.slice(drawCount);
-        const afterDeckCount = nextDrawPile.length;
+        const afterDeckCount = action.afterCount;
 
         if (action.user === 'PLAYER') {
           drawnCards.forEach((card, cardIndex) => {
@@ -850,7 +924,18 @@ export default function App() {
         });
         setLogs(prev => [...prev, zhCN.logs.limitedSharedDeck]);
       }
-      executeDrawQueue(queue);
+      let nextDeckCount = deckCount;
+      const queueWithSnapshots = queue.map(action => {
+        const drawCount = Math.min(action.count, nextDeckCount);
+        const snapshot = {
+          ...action,
+          beforeCount: nextDeckCount,
+          afterCount: nextDeckCount - drawCount,
+        };
+        nextDeckCount = snapshot.afterCount;
+        return snapshot;
+      });
+      executeDrawQueue(queueWithSnapshots);
     };
 
     const startDiscardSequence = () => {
@@ -1225,6 +1310,10 @@ export default function App() {
   const isPlayerTurnState = (state.phase === 'PLAYER_ATTACK' || state.phase === 'PLAYER_DEFEND') && !isProcessing;
   const playerMutationCount = countMutatedCards(state.playerHand);
   const aiMutationCount = countMutatedCards(state.aiHand);
+  const selectedVolcanoCards = state.playerHand.filter(card =>
+    selectedCards.includes(card.id) && card.mutationType === 'VOLCANO'
+  );
+  const showResonancePreview = selectedVolcanoCards.length >= 2 && !isRerollMode && isPlayerTurnState;
   const mutationRoundsRemaining = state.drawPile.length === 0
     ? 0
     : MUTATION_INTERVAL_ROUNDS - completedClashesSinceMutation;
@@ -1599,7 +1688,7 @@ export default function App() {
     <div className="w-[1024px] h-[768px] mx-auto bg-bg text-text-main flex flex-col font-sans border border-border overflow-hidden relative shadow-2xl">
       {/* Header */}
       <div className="h-20 px-10 flex items-center justify-between border-b border-border bg-surface/80 backdrop-blur-md z-20">
-        <div className={`w-[300px] p-1 rounded-lg transition-all duration-350 border border-transparent ${playerHPShake ? 'animate-hp-shake' : ''} ${playerHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
+        <div className={`relative w-[300px] p-1 rounded-lg transition-all duration-350 border border-transparent ${playerHPShake ? 'animate-hp-shake' : ''} ${burnFeedback?.targets.includes('PLAYER') ? 'burn-hp-feedback animate-burn-hp-shake' : ''} ${playerHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
           <div className="text-[12px] mb-1 text-text-dim tracking-wider">玩家</div>
           <div className="w-full h-3 bg-[#222] rounded-full overflow-hidden border border-[#333]">
             <motion.div 
@@ -1612,6 +1701,22 @@ export default function App() {
             <span className="text-sm">{state.playerHP}/{INITIAL_HP}</span>
             <span className="text-[10px]">生命</span>
           </div>
+          <AnimatePresence>
+            {burnFeedback?.targets.includes('PLAYER') && (
+              <motion.div
+                key={`player-burn-${burnFeedback.token}`}
+                initial={{ opacity: 0, y: 4, scale: 0.92 }}
+                animate={{ opacity: [0, 1, 1, 0], y: [4, -18, -32], scale: [0.92, 1.04, 1] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.72, ease: 'easeOut' }}
+                className="absolute left-2 -top-1 rounded-md border border-orange-500/35 bg-black/75 px-2 py-1 font-mono text-[11px] font-black text-orange-300 shadow-[0_0_18px_rgba(249,115,22,0.25)] pointer-events-none"
+              >
+                🔥 灼烧共鸣 -1
+                <span className="absolute -right-3 top-2 text-[10px] opacity-80">🔥</span>
+                <span className="absolute right-5 -top-2 text-[8px] opacity-60">🔥</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="text-center">
@@ -1619,7 +1724,7 @@ export default function App() {
           <div className="text-[11px] text-accent font-bold tracking-widest">战斗引擎 V1.0</div>
         </div>
 
-        <div className={`w-[300px] text-right p-1 rounded-lg transition-all duration-350 border border-transparent ${aiHPShake ? 'animate-hp-shake' : ''} ${aiHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
+        <div className={`relative w-[300px] text-right p-1 rounded-lg transition-all duration-350 border border-transparent ${aiHPShake ? 'animate-hp-shake' : ''} ${burnFeedback?.targets.includes('AI') ? 'burn-hp-feedback animate-burn-hp-shake' : ''} ${aiHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
           <div className="text-[12px] mb-1 text-text-dim tracking-wider">对手</div>
           <div className="w-full h-3 bg-[#222] rounded-full overflow-hidden border border-[#333]">
             <motion.div 
@@ -1632,6 +1737,22 @@ export default function App() {
             <span className="text-sm">{state.aiHP}/{INITIAL_HP}</span>
             <span className="text-[10px]">生命</span>
           </div>
+          <AnimatePresence>
+            {burnFeedback?.targets.includes('AI') && (
+              <motion.div
+                key={`ai-burn-${burnFeedback.token}`}
+                initial={{ opacity: 0, y: 4, scale: 0.92 }}
+                animate={{ opacity: [0, 1, 1, 0], y: [4, -18, -32], scale: [0.92, 1.04, 1] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.72, ease: 'easeOut' }}
+                className="absolute right-2 -top-1 rounded-md border border-orange-500/35 bg-black/75 px-2 py-1 font-mono text-[11px] font-black text-orange-300 shadow-[0_0_18px_rgba(249,115,22,0.25)] pointer-events-none"
+              >
+                🔥 灼烧共鸣 -1
+                <span className="absolute -left-3 top-2 text-[10px] opacity-80">🔥</span>
+                <span className="absolute left-5 -top-2 text-[8px] opacity-60">🔥</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -1907,6 +2028,9 @@ export default function App() {
                                 {clashResult.aiVolcanoDamage > 0 && (
                                   <span className="text-orange-300">　火山异变：+{clashResult.aiVolcanoDamage}</span>
                                 )}
+                                {clashResult.aiResonanceDamage > 0 && (
+                                  <span className="text-red-300">　灼烧伤害：+{clashResult.aiResonanceDamage}</span>
+                                )}
                                 <span className="text-white/80">　最终伤害：{clashResult.aiHPChange}</span>
                               </div>
                             )}
@@ -1917,6 +2041,9 @@ export default function App() {
                                 卡牌基础伤害：{clashResult.playerBaseDamage}
                                 {clashResult.playerVolcanoDamage > 0 && (
                                   <span className="text-orange-300">　火山异变：+{clashResult.playerVolcanoDamage}</span>
+                                )}
+                                {clashResult.playerResonanceDamage > 0 && (
+                                  <span className="text-red-300">　灼烧伤害：+{clashResult.playerResonanceDamage}</span>
                                 )}
                                 <span className="text-white/80">　最终伤害：{clashResult.playerHPChange}</span>
                               </div>
@@ -2036,9 +2163,13 @@ export default function App() {
               const isMutationLimit = isEnvironment && log.includes('上限');
               const isMutationClosed = isEnvironment && log.includes('耗尽');
               const isVolcanoDamage = log.includes('[火山异变]');
+              const isBondLog = log.includes('[羁绊]');
+              const isBurnLog = log.includes('[灼烧]');
               
               let textColor = 'text-text-dim';
-              if (isVolcanoDamage) textColor = 'text-orange-500/90';
+              if (isBondLog) textColor = 'text-orange-300';
+              else if (isBurnLog) textColor = 'text-orange-500/90';
+              else if (isVolcanoDamage) textColor = 'text-orange-500/90';
               else if (isMutationClosed) textColor = 'text-zinc-500';
               else if (isMutationLimit) textColor = 'text-orange-300/55';
               else if (isAiMutation) textColor = 'text-red-400/75';
@@ -2209,6 +2340,12 @@ export default function App() {
           </div>
 
           <div className="flex gap-4">
+            {showResonancePreview && (
+              <div className="absolute bottom-[84px] left-1/2 -translate-x-1/2 w-[220px] max-h-[44px] rounded-md border border-orange-500/25 bg-[#130b08]/88 px-2.5 py-1.5 text-center font-mono shadow-[0_0_12px_rgba(249,115,22,0.10)] pointer-events-none">
+                <div className="text-[9.5px] font-black tracking-widest text-orange-200 leading-tight">🔥 灼烧共鸣已激活</div>
+                <div className="mt-0.5 text-[8px] font-semibold text-orange-100/60 leading-tight">火山牌命中后额外造成 1 点伤害</div>
+              </div>
+            )}
             {/* BUTTON 1: LEFT BUTTON */}
             {isRerollMode ? (
               <button 
@@ -2503,6 +2640,33 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Scorching resonance visual layer */}
+      <div className="absolute inset-0 pointer-events-none z-[146] overflow-hidden">
+        <AnimatePresence>
+          {resonanceAnimation && (
+            <motion.div
+              key={`resonance-${resonanceAnimation.token}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 1, 1, 0] }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.72, ease: 'easeOut' }}
+              className="absolute inset-0"
+            >
+              <div className="absolute left-1/2 top-[330px] h-[2px] w-[180px] -translate-x-1/2 bg-gradient-to-r from-transparent via-orange-400/80 to-transparent shadow-[0_0_18px_rgba(249,115,22,0.55)]" />
+              <div className="absolute left-1/2 top-[292px] -translate-x-1/2 rounded-full border border-orange-500/35 bg-[#180904]/90 px-4 py-2 text-center font-mono shadow-[0_0_28px_rgba(249,115,22,0.28)]">
+                <div className="text-[12px] font-black tracking-widest text-orange-200">🔥 灼烧共鸣</div>
+              </div>
+              <div className={`absolute ${resonanceAnimation.target === 'AI' ? 'left-[610px] top-[104px] text-orange-300' : 'left-[610px] bottom-[132px] text-red-300'} rounded-md border border-orange-500/30 bg-black/70 px-2 py-1 font-mono text-[12px] font-black shadow-[0_0_18px_rgba(249,115,22,0.2)]`}>
+                灼烧 -1
+              </div>
+              <span className="absolute left-[45%] top-[315px] text-[12px] drop-shadow-[0_0_8px_rgba(251,146,60,0.8)]">🔥</span>
+              <span className="absolute left-[52%] top-[338px] text-[10px] opacity-80 drop-shadow-[0_0_8px_rgba(251,146,60,0.7)]">🔥</span>
+              <span className="absolute left-[49%] top-[358px] text-[9px] opacity-70 drop-shadow-[0_0_8px_rgba(251,146,60,0.7)]">🔥</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       {/* Volcano mutation animation layer */}
       <div className="absolute inset-0 pointer-events-none z-[145] overflow-hidden">
         <AnimatePresence>
@@ -2597,6 +2761,24 @@ export default function App() {
         }
         .animate-hp-shake {
           animation: hp-shake-kf 0.3s ease-in-out;
+        }
+
+        .burn-hp-feedback {
+          background: rgba(249, 115, 22, 0.10);
+          border-color: rgba(249, 115, 22, 0.55) !important;
+          box-shadow: 0 0 18px rgba(249, 115, 22, 0.24), inset 0 0 0 1px rgba(251, 146, 60, 0.12);
+        }
+
+        .animate-burn-hp-shake {
+          animation: burn-hp-shake-kf 0.72s ease-out;
+        }
+
+        @keyframes burn-hp-shake-kf {
+          0%, 100% { transform: translateX(0); }
+          16% { transform: translateX(-4px); }
+          32% { transform: translateX(4px); }
+          48% { transform: translateX(-2px); }
+          64% { transform: translateX(2px); }
         }
 
         .volcano-event-panel {

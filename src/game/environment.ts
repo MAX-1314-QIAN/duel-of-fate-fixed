@@ -5,14 +5,39 @@ export const MUTATION_INTERVAL_ROUNDS = 2;
 
 const shuffleCards = (cards: Card[]) => [...cards].sort(() => Math.random() - 0.5);
 
-export const getMutationCandidates = (hand: Card[]) =>
-  shuffleCards(hand.filter(card => !card.mutationType)).slice(0, 2);
+export const getMutationCandidates = (hand: Card[]) => {
+  const normalCardsByType = shuffleCards(hand.filter(card => !card.mutationType))
+    .reduce<Partial<Record<CardType, Card[]>>>((groups, card) => {
+      groups[card.type] = [...(groups[card.type] ?? []), card];
+      return groups;
+    }, {});
+
+  return shuffleCards(Object.values(normalCardsByType).map(cards => cards[0])).slice(0, 2);
+};
 
 export const countMutatedCards = (hand: Card[]) =>
   hand.filter(card => card.mutationType === 'VOLCANO').length;
 
+export const calculateVolcanoMutationBonus = (successfulVolcanoHits: number) =>
+  Math.min(successfulVolcanoHits, 2);
+
 export const getVolcanoMutationBonus = (damagingCards: Card[]) =>
-  damagingCards.filter(card => card.mutationType === 'VOLCANO').length;
+  calculateVolcanoMutationBonus(
+    damagingCards.filter(card => card.mutationType === 'VOLCANO').length
+  );
+
+export const getVolcanoResonanceBonus = ({
+  playedCards,
+  damagingCards,
+}: {
+  playedCards: Card[];
+  damagingCards: Card[];
+}) => {
+  const playedVolcanoCount = playedCards.filter(card => card.mutationType === 'VOLCANO').length;
+  const damagingVolcanoCount = damagingCards.filter(card => card.mutationType === 'VOLCANO').length;
+
+  return playedVolcanoCount >= 2 && damagingVolcanoCount >= 1 ? 1 : 0;
+};
 
 export const canTriggerMutation = (sharedDeckCount: number, mutationCount: number) =>
   sharedDeckCount > 0 && mutationCount >= MUTATION_INTERVAL_ROUNDS;

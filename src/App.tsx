@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowUp, ArrowDown, ArrowUpDown, Sword, RotateCcw, User, Cpu, ChevronRight, Info, Lock, Volume2, VolumeX, Settings } from 'lucide-react';
-import { Card, CardType, GameState, WIN_MAP } from './types';
+import { Card, CardType, GameState, MutationType, WIN_MAP } from './types';
 import { zhCN } from './locales/zh-CN';
 import { allocateLimitedSharedDeckDraws, DrawQueueItem } from './game/sharedDeck';
 import {
-  ACTIVE_ENVIRONMENT_CONFIG,
+  DEFAULT_ENVIRONMENT_ROUTE,
+  ENVIRONMENT_ROUTE_CONFIG,
+  FOREST_ENVIRONMENT_CONFIG,
   MUTATION_INTERVAL_ROUNDS,
   MUTATION_LIMIT,
   VOLCANO_ENVIRONMENT_CONFIG,
@@ -17,6 +19,7 @@ import {
   countAllMutatedCards,
   getForestMutationCandidates,
   getGlacierMutationCandidates,
+  getMutationCandidates,
   removeMutationFromCard,
   selectAiMutationCandidate,
 } from './game/environment';
@@ -56,11 +59,19 @@ const forestIcon = (card: Card) =>
   card.forestGrowthStage === 'MATURE' ? '🌿' : '🌱';
 const isMatureForestCard = (card: Card) =>
   card.mutationType === 'FOREST' && card.forestGrowthStage === 'MATURE';
-const isGlacierEnvironment = ACTIVE_ENVIRONMENT_CONFIG.id === 'GLACIER';
-const activeMutationType = ACTIVE_ENVIRONMENT_CONFIG.id;
-const activeMutationLabel = isGlacierEnvironment ? '冰川' : '森林';
-const activeMutationCardLabel = (type: CardType) =>
-  isGlacierEnvironment ? glacierCardLabel(type) : forestCardLabel(type);
+type RoutedEnvironmentType = typeof DEFAULT_ENVIRONMENT_ROUTE[number];
+const ENVIRONMENT_CONFIG_BY_ID = {
+  VOLCANO: VOLCANO_ENVIRONMENT_CONFIG,
+  FOREST: FOREST_ENVIRONMENT_CONFIG,
+} as const;
+const environmentLabel = (type: MutationType) =>
+  type === 'VOLCANO' ? '火山' : type === 'FOREST' ? '森林' : '冰川';
+const mutationCardLabel = (mutationType: MutationType, type: CardType) =>
+  mutationType === 'VOLCANO'
+    ? volcanoCardLabel(type)
+    : mutationType === 'FOREST'
+      ? forestCardLabel(type)
+      : glacierCardLabel(type);
 const battleCardLabel = (card: Card) =>
   card.mutationType === 'VOLCANO'
     ? volcanoCardLabel(card.type)
@@ -132,6 +143,9 @@ export default function App() {
   const settlementTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const continueAfterMutationRef = useRef<(() => void) | null>(null);
   const completedClashCountRef = useRef(0);
+  const environmentRouteIndexRef = useRef(0);
+  const environmentRoundsRemainingRef = useRef(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
+  const completedClashesSinceMutationRef = useRef(0);
   const clearSettlementTimers = useCallback(() => {
     settlementTimersRef.current.forEach(timer => clearTimeout(timer));
     settlementTimersRef.current = [];
@@ -149,7 +163,11 @@ export default function App() {
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [settlementSubPhase, setSettlementSubPhase] = useState<'resolving' | 'move-to-discard' | 'replenishing' | 'replenish-complete' | 'round-end' | null>(null);
-  const [logs, setLogs] = useState<string[]>([zhCN.logs.battleInitialized]);
+  const [logs, setLogs] = useState<string[]>([
+    zhCN.logs.battleInitialized,
+    '[环境路线] 当前环境：火山',
+    '[环境路线] 下一环境：森林',
+  ]);
   
   const [isRerollMode, setIsRerollMode] = useState<boolean>(false);
   const [rerollSelectedCardId, setRerollSelectedCardId] = useState<string | null>(null);
@@ -162,6 +180,9 @@ export default function App() {
   const [hasLoggedDepletion, setHasLoggedDepletion] = useState<boolean>(false);
   const [resourceDepletedWinnerDetail, setResourceDepletedWinnerDetail] = useState<{ eng: string; chn: string } | null>(null);
   const [completedClashesSinceMutation, setCompletedClashesSinceMutation] = useState(0);
+  const [environmentRouteIndex, setEnvironmentRouteIndex] = useState(0);
+  const [environmentRoundsRemaining, setEnvironmentRoundsRemaining] = useState(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
+  const [environmentSwitchNotice, setEnvironmentSwitchNotice] = useState<{ from: RoutedEnvironmentType; to: RoutedEnvironmentType; token: number } | null>(null);
   const [completedClashCount, setCompletedClashCount] = useState(0);
   const [mutationCandidates, setMutationCandidates] = useState<Card[]>([]);
   const [mutationPhaseNotice, setMutationPhaseNotice] = useState<string | null>(null);
@@ -186,6 +207,18 @@ export default function App() {
   } | null>(null);
   const [glacierEchoCandidates, setGlacierEchoCandidates] = useState<Card[]>([]);
   const continueAfterGlacierEchoRef = useRef<((selectedCardId?: string) => void) | null>(null);
+
+  useEffect(() => {
+    environmentRouteIndexRef.current = environmentRouteIndex;
+  }, [environmentRouteIndex]);
+
+  useEffect(() => {
+    environmentRoundsRemainingRef.current = environmentRoundsRemaining;
+  }, [environmentRoundsRemaining]);
+
+  useEffect(() => {
+    completedClashesSinceMutationRef.current = completedClashesSinceMutation;
+  }, [completedClashesSinceMutation]);
   
   // Custom feedback states
   const [playerDiscardPrompt, setPlayerDiscardPrompt] = useState<string | null>(null);
@@ -420,6 +453,12 @@ export default function App() {
     setHasLoggedDepletion(false);
     setResourceDepletedWinnerDetail(null);
     setCompletedClashesSinceMutation(0);
+    completedClashesSinceMutationRef.current = 0;
+    setEnvironmentRouteIndex(0);
+    environmentRouteIndexRef.current = 0;
+    setEnvironmentRoundsRemaining(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
+    environmentRoundsRemainingRef.current = ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment;
+    setEnvironmentSwitchNotice(null);
     setCompletedClashCount(0);
     completedClashCountRef.current = 0;
     setMutationCandidates([]);
@@ -445,6 +484,11 @@ export default function App() {
     setSharedDeckTransit(null);
     setSharedDeckScale(false);
     setActiveAnims([]);
+    setLogs([
+      zhCN.logs.reset,
+      '[环境路线] 当前环境：火山',
+      '[环境路线] 下一环境：森林',
+    ]);
   };
 
   const returnToLobby = () => {
@@ -467,6 +511,53 @@ export default function App() {
     }, 780);
   }, [scheduleSettlementTimer]);
 
+  const activeEnvironmentType = DEFAULT_ENVIRONMENT_ROUTE[environmentRouteIndex];
+  const activeEnvironmentConfig = ENVIRONMENT_CONFIG_BY_ID[activeEnvironmentType];
+  const nextEnvironmentType = DEFAULT_ENVIRONMENT_ROUTE[(environmentRouteIndex + 1) % DEFAULT_ENVIRONMENT_ROUTE.length];
+  const nextEnvironmentConfig = ENVIRONMENT_CONFIG_BY_ID[nextEnvironmentType];
+  const activeMutationType = activeEnvironmentType as unknown as MutationType;
+  const activeMutationLabel = environmentLabel(activeMutationType);
+  const isVolcanoEnvironment = activeMutationType === 'VOLCANO';
+  const isForestEnvironment = activeMutationType === 'FOREST';
+  const isGlacierEnvironment = activeMutationType === 'GLACIER';
+  const activeMutationCardLabel = (type: CardType) => mutationCardLabel(activeMutationType, type);
+  const getActiveMutationCandidates = (hand: Card[]) =>
+    activeMutationType === 'VOLCANO'
+      ? getMutationCandidates(hand)
+      : activeMutationType === 'GLACIER'
+        ? getGlacierMutationCandidates(hand)
+        : getForestMutationCandidates(hand);
+  const playerVolcanoMutationCount = state.playerHand.filter(card => card.mutationType === 'VOLCANO').length;
+  const playerForestMutationCount = state.playerHand.filter(card => card.mutationType === 'FOREST').length;
+
+  const switchToNextEnvironmentIfNeeded = useCallback(() => {
+    const remaining = environmentRoundsRemainingRef.current;
+    if (remaining > 0 || stateRef.current.drawPile.length <= 0) return;
+
+    const currentIndex = environmentRouteIndexRef.current;
+    const from = DEFAULT_ENVIRONMENT_ROUTE[currentIndex];
+    const nextIndex = (currentIndex + 1) % DEFAULT_ENVIRONMENT_ROUTE.length;
+    const to = DEFAULT_ENVIRONMENT_ROUTE[nextIndex];
+
+    environmentRouteIndexRef.current = nextIndex;
+    environmentRoundsRemainingRef.current = ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment;
+    completedClashesSinceMutationRef.current = 0;
+    setEnvironmentRouteIndex(nextIndex);
+    setEnvironmentRoundsRemaining(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
+    setCompletedClashesSinceMutation(0);
+    setEnvironmentSwitchNotice({ from, to, token: Date.now() });
+    setLogs(prev => [
+      ...prev,
+      `[环境切换] ${environmentLabel(from)} → ${environmentLabel(to)}`,
+      `[环境路线] 当前环境：${environmentLabel(to)}`,
+      `[环境路线] 下一环境：${environmentLabel(DEFAULT_ENVIRONMENT_ROUTE[(nextIndex + 1) % DEFAULT_ENVIRONMENT_ROUTE.length])}`,
+    ]);
+    showMutationPhaseNotice(`环境切换：${ENVIRONMENT_CONFIG_BY_ID[from].icon} ${environmentLabel(from)} → ${ENVIRONMENT_CONFIG_BY_ID[to].icon} ${environmentLabel(to)}`, 850);
+    scheduleSettlementTimer(() => {
+      setEnvironmentSwitchNotice(null);
+    }, 900);
+  }, [scheduleSettlementTimer, showMutationPhaseNotice]);
+
   const finishMutationStage = useCallback((playerCardId?: string) => {
     setState(prev => {
       const logsToAppend: string[] = [];
@@ -480,7 +571,9 @@ export default function App() {
       if (playerCardId) {
         logsToAppend.push(`[玩家] 获得“${
           selectedPlayerCard
-            ? (isGlacierEnvironment ? glacierCardLabel(selectedPlayerCard.type) : `${forestCardLabel(selectedPlayerCard.type)}·幼苗`)
+            ? (activeMutationType === 'FOREST'
+              ? `${forestCardLabel(selectedPlayerCard.type)}·幼苗`
+              : mutationCardLabel(activeMutationType, selectedPlayerCard.type))
             : `${activeMutationLabel}异变牌`
         }”`);
       }
@@ -489,9 +582,7 @@ export default function App() {
       if (countAllMutatedCards(aiHand) >= MUTATION_LIMIT) {
         logsToAppend.push('[环境事件] 对手异变牌已达上限，本次感染跳过');
       } else {
-        const aiCandidates = isGlacierEnvironment
-          ? getGlacierMutationCandidates(aiHand)
-          : getForestMutationCandidates(aiHand);
+        const aiCandidates = getActiveMutationCandidates(aiHand);
         const selectedAiCard = selectAiMutationCandidate(aiCandidates, aiHand);
         if (selectedAiCard) {
           aiHand = aiHand.map(applyMutationToCard(selectedAiCard.id, activeMutationType, completedClashCountRef.current));
@@ -536,9 +627,12 @@ export default function App() {
     const continueTurn = continueAfterMutationRef.current;
     continueAfterMutationRef.current = null;
     if (continueTurn) {
-      scheduleSettlementTimer(continueTurn, 300);
+      scheduleSettlementTimer(() => {
+        switchToNextEnvironmentIfNeeded();
+        continueTurn();
+      }, 300);
     }
-  }, [scheduleSettlementTimer, showMutationPhaseNotice]);
+  }, [activeMutationLabel, activeMutationType, getActiveMutationCandidates, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded]);
 
   const handleMutationPick = useCallback((cardId: string) => {
     const selectedCandidate = mutationCandidates.find(card => card.id === cardId);
@@ -1016,9 +1110,14 @@ export default function App() {
         stateRef.current = latest;
         setState(latest);
 
+        const nextEnvironmentRoundsRemaining = Math.max(0, environmentRoundsRemainingRef.current - 1);
+        environmentRoundsRemainingRef.current = nextEnvironmentRoundsRemaining;
+        setEnvironmentRoundsRemaining(nextEnvironmentRoundsRemaining);
+        setLogs(prev => [...prev, `[环境路线] ${activeMutationLabel}阶段剩余：${nextEnvironmentRoundsRemaining} 轮`]);
+
         const nextMutationCount = Math.min(
           MUTATION_INTERVAL_ROUNDS,
-          completedClashesSinceMutation + 1 + forestMutationCountdownReduction
+          completedClashesSinceMutationRef.current + 1 + forestMutationCountdownReduction
         );
 
         if (latest.drawPile.length <= 0) {
@@ -1028,15 +1127,20 @@ export default function App() {
         }
 
         if (!canTriggerMutation(latest.drawPile.length, nextMutationCount)) {
+          completedClashesSinceMutationRef.current = nextMutationCount;
           setCompletedClashesSinceMutation(nextMutationCount);
           const roundsRemaining = MUTATION_INTERVAL_ROUNDS - nextMutationCount;
           if (roundsRemaining === 1) {
             setLogs(prev => [...prev, `[环境事件] ${activeMutationLabel}感染将在 1 轮后触发`]);
           }
-          scheduleSettlementTimer(finishTurn, 350);
+          scheduleSettlementTimer(() => {
+            switchToNextEnvironmentIfNeeded();
+            finishTurn();
+          }, 350);
           return;
         }
 
+        completedClashesSinceMutationRef.current = 0;
         setCompletedClashesSinceMutation(0);
         setLogs(prev => [...prev, `[环境事件] ${activeMutationLabel}感染已触发`]);
         continueAfterMutationRef.current = finishTurn;
@@ -1049,9 +1153,7 @@ export default function App() {
           return;
         }
 
-        const playerCandidates = isGlacierEnvironment
-          ? getGlacierMutationCandidates(latest.playerHand)
-          : getForestMutationCandidates(latest.playerHand);
+        const playerCandidates = getActiveMutationCandidates(latest.playerHand);
         if (playerCandidates.length === 0) {
           setLogs(prev => [...prev, '[环境事件] 当前没有可感染的普通牌']);
           finishMutationStage();
@@ -1333,7 +1435,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [addAnimation, clearSettlementTimers, completedClashCount, completedClashesSinceMutation, finishMutationStage, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, triggerDeckFeedback]);
+  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, finishMutationStage, getActiveMutationCandidates, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -1715,7 +1817,7 @@ export default function App() {
     let bounce = false;
 
     if (mutationPhaseNotice) {
-      titleEng = ACTIVE_ENVIRONMENT_CONFIG.name;
+      titleEng = activeEnvironmentConfig.name;
       titleChn = mutationPhaseNotice;
       type = 'green';
       pulse = true;
@@ -2267,22 +2369,28 @@ export default function App() {
             </motion.div>
           ) : (
             <div key="battle" className="flex flex-col gap-6 items-center relative">
-              <div className={`${isGlacierEnvironment ? 'glacier-event-panel' : 'forest-event-panel'} absolute -top-16 left-1/2 -translate-x-1/2 w-[250px] rounded-md border ${isGlacierEnvironment ? 'border-cyan-300/30 bg-[#06121a]/88 shadow-[0_0_16px_rgba(34,211,238,0.12),inset_0_0_18px_rgba(34,211,238,0.04)]' : 'border-emerald-500/30 bg-[#06130e]/88 shadow-[0_0_16px_rgba(16,185,129,0.12),inset_0_0_18px_rgba(16,185,129,0.04)]'} px-3 py-2 text-center font-mono ${mutationEventPulse ? (isGlacierEnvironment ? 'glacier-event-panel--pulse' : 'forest-event-panel--pulse') : ''}`}>
-                <span className={`${isGlacierEnvironment ? 'glacier-event-crystal' : 'forest-event-leaf'} forest-event-leaf--left`} aria-hidden="true">
-                  {isGlacierEnvironment ? '✦' : '⌁'}
-                </span>
-                <span className={`${isGlacierEnvironment ? 'glacier-event-crystal' : 'forest-event-leaf'} forest-event-leaf--right`} aria-hidden="true">
-                  {isGlacierEnvironment ? '✦' : '⌁'}
-                </span>
-                <div className={`relative z-10 flex items-center justify-center gap-1.5 text-[11px] font-black tracking-widest ${isGlacierEnvironment ? 'text-cyan-100' : 'text-emerald-200'}`}>
-                  <span className="text-[12px]" aria-hidden="true">{ACTIVE_ENVIRONMENT_CONFIG.icon}</span>
-                  <span>{ACTIVE_ENVIRONMENT_CONFIG.name}</span>
+              <div className={`route-event-panel route-event-panel--${activeEnvironmentType.toLowerCase()} absolute -top-20 left-1/2 -translate-x-1/2 w-[286px] rounded-md border px-3 py-2 text-center font-mono ${mutationEventPulse ? 'route-event-panel--pulse' : ''}`}>
+                <div className="relative z-10 text-[8px] font-black tracking-[0.22em] text-white/42">环境路线</div>
+                <div className="relative z-10 mt-1 flex items-center justify-center gap-2">
+                  <div className="min-w-[96px] text-right">
+                    <div className="text-[12px] font-black tracking-widest text-white/90">
+                      <span aria-hidden="true">{activeEnvironmentConfig.icon}</span> {environmentLabel(activeEnvironmentType)}
+                    </div>
+                    <div className="mt-0.5 text-[8px] font-bold text-white/52">当前环境 · 剩余 {environmentRoundsRemaining} 轮</div>
+                  </div>
+                  <div className="text-[13px] font-black text-white/35">→</div>
+                  <div className="min-w-[82px] text-left">
+                    <div className="text-[10px] font-black tracking-widest text-white/62">
+                      <span aria-hidden="true">{nextEnvironmentConfig.icon}</span> {environmentLabel(nextEnvironmentType)}
+                    </div>
+                    <div className="mt-0.5 text-[8px] font-bold text-white/38">下一环境</div>
+                  </div>
                 </div>
-                <div className={`relative z-10 text-[10px] font-semibold mt-0.5 ${isGlacierEnvironment ? 'text-cyan-50/76' : 'text-emerald-100/76'}`}>
+                <div className="relative z-10 mt-1 text-[9px] font-semibold text-white/70">
                   {mutationEventStatus.startsWith('下一次感染：') ? (
                     <>
-                      下一次感染：
-                      <span className={`mx-0.5 text-[12px] font-black drop-shadow-[0_0_7px_rgba(52,211,153,0.35)] ${isGlacierEnvironment ? 'text-cyan-100' : 'text-emerald-200'}`}>
+                      下一次{activeMutationLabel}感染：
+                      <span className="mx-0.5 text-[12px] font-black text-white drop-shadow-[0_0_7px_rgba(255,255,255,0.28)]">
                         {mutationRoundsRemaining}
                       </span>
                       轮后
@@ -2293,8 +2401,8 @@ export default function App() {
 
               {/* AI Battle Slot */}
               <div className="flex gap-4 min-h-[140px] items-center">
-                <div className={`absolute -right-32 top-8 min-w-[120px] text-[10px] font-mono font-bold ${isGlacierEnvironment ? 'text-cyan-100/80' : 'text-emerald-200/80'} tracking-wider transition-transform duration-200 ${aiMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
-                  <div>{ACTIVE_ENVIRONMENT_CONFIG.icon} 对手手牌异变：{aiMutationCount} / {MUTATION_LIMIT}</div>
+                <div className={`absolute -right-32 top-8 min-w-[120px] text-[10px] font-mono font-bold text-white/70 tracking-wider transition-transform duration-200 ${aiMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
+                  <div>对手异变牌：{aiMutationCount} / {MUTATION_LIMIT}</div>
                   {aiMutationCount >= MUTATION_LIMIT && (
                     <div className="mt-0.5 text-[9px] text-emerald-200/45">已达上限</div>
                   )}
@@ -2637,11 +2745,15 @@ export default function App() {
               const isMutationLimit = isEnvironment && log.includes('上限');
               const isMutationClosed = isEnvironment && log.includes('耗尽');
               const isVolcanoDamage = log.includes('[火山异变]');
+              const isEnvironmentRouteLog = log.includes('[环境路线]');
+              const isEnvironmentSwitchLog = log.includes('[环境切换]');
               const isBondLog = log.includes('[羁绊]');
               const isBurnLog = log.includes('[灼烧]');
               
               let textColor = 'text-text-dim';
-              if (isSymbiosisLog) textColor = 'text-teal-300 font-semibold';
+              if (isEnvironmentSwitchLog) textColor = 'text-white/90 font-semibold';
+              else if (isEnvironmentRouteLog) textColor = 'text-sky-200/80';
+              else if (isSymbiosisLog) textColor = 'text-teal-300 font-semibold';
               else if (isForestRecoveryLog) textColor = 'text-emerald-300 font-semibold';
               else if (isHpRecoveryLog) textColor = 'text-emerald-200/90';
               else if (isForestGrowthLog) textColor = 'text-emerald-400/90';
@@ -2757,8 +2869,12 @@ export default function App() {
 
         {/* CENTER COLUMN: ACTIVE HAND CARDS & CONTROL BUTTONS */}
         <div className="flex-1 flex flex-col items-center justify-center gap-5">
-          <div className={`text-[10px] font-mono font-bold text-emerald-200/80 tracking-wider leading-tight text-center transition-transform duration-200 ${playerMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
-            <div>🌿 我方手牌异变：{playerMutationCount} / {MUTATION_LIMIT}</div>
+          <div className={`text-[10px] font-mono font-bold text-white/75 tracking-wider leading-tight text-center transition-transform duration-200 ${playerMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
+            <div>异变牌：{playerMutationCount} / {MUTATION_LIMIT}</div>
+            <div className="mt-0.5 flex justify-center gap-3 text-[9px]">
+              <span className="text-orange-200/85">🔥 {playerVolcanoMutationCount}</span>
+              <span className="text-emerald-200/85">🌿 {playerForestMutationCount}</span>
+            </div>
             {playerMutationCount >= MUTATION_LIMIT && (
               <div className="mt-0.5 text-[9px] text-emerald-200/45">已达上限</div>
             )}
@@ -3082,6 +3198,26 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
+        {environmentSwitchNotice && (
+          <motion.div
+            key={`environment-switch-${environmentSwitchNotice.token}`}
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+            animate={{ opacity: [0, 1, 1, 0], y: [8, 0, -2, -6], scale: [0.96, 1, 1, 0.98] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.85, ease: 'easeOut' }}
+            className="absolute left-1/2 top-[242px] z-[119] -translate-x-1/2 rounded-lg border border-white/15 bg-[#080a0f]/92 px-4 py-2 text-center font-mono shadow-[0_0_24px_rgba(0,0,0,0.35)] pointer-events-none"
+          >
+            <div className="text-[12px] font-black tracking-widest text-white/90">环境切换</div>
+            <div className="mt-1 text-[10px] font-bold text-white/70">
+              {ENVIRONMENT_CONFIG_BY_ID[environmentSwitchNotice.from].icon} {environmentLabel(environmentSwitchNotice.from)}
+              <span className="mx-2 text-white/40">→</span>
+              {ENVIRONMENT_CONFIG_BY_ID[environmentSwitchNotice.to].icon} {environmentLabel(environmentSwitchNotice.to)}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {glacierEchoCandidates.length > 0 && (
           <div className="absolute inset-0 flex items-center justify-center z-[142] pointer-events-none">
             <motion.div
@@ -3128,39 +3264,46 @@ export default function App() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.96, opacity: 0, y: 6 }}
               transition={{ duration: 0.18 }}
-              className={`w-[420px] rounded-xl border ${isGlacierEnvironment ? 'border-cyan-300/35 bg-[#06121a]/92 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(34,211,238,0.12)]' : 'border-emerald-500/35 bg-[#07120d]/92 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(16,185,129,0.12)]'} p-5 backdrop-blur-md font-mono text-center pointer-events-auto`}
+              className={`w-[420px] rounded-xl border ${isVolcanoEnvironment ? 'border-orange-500/35 bg-[#130b08]/92 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(249,115,22,0.12)]' : isGlacierEnvironment ? 'border-cyan-300/35 bg-[#06121a]/92 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(34,211,238,0.12)]' : 'border-emerald-500/35 bg-[#07120d]/92 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(16,185,129,0.12)]'} p-5 backdrop-blur-md font-mono text-center pointer-events-auto`}
             >
-              <h3 className={`${isGlacierEnvironment ? 'text-cyan-100' : 'text-emerald-200'} text-sm font-black tracking-widest`}>
-                {ACTIVE_ENVIRONMENT_CONFIG.icon} {activeMutationLabel}感染
+              <h3 className={`${isVolcanoEnvironment ? 'text-orange-200' : isGlacierEnvironment ? 'text-cyan-100' : 'text-emerald-200'} text-sm font-black tracking-widest`}>
+                {activeEnvironmentConfig.icon} {activeMutationLabel}感染
               </h3>
-              <p className={`mt-1 text-[11px] ${isGlacierEnvironment ? 'text-cyan-50/75' : 'text-emerald-100/75'} font-semibold`}>
-                请选择 1 张手牌感染为{isGlacierEnvironment ? '冰川牌' : '森林幼苗'}
+              <p className={`mt-1 text-[11px] ${isVolcanoEnvironment ? 'text-orange-100/75' : isGlacierEnvironment ? 'text-cyan-50/75' : 'text-emerald-100/75'} font-semibold`}>
+                请选择 1 张手牌感染为{isVolcanoEnvironment ? '火山牌' : isGlacierEnvironment ? '冰川牌' : '森林幼苗'}
               </p>
               <div className="mt-5 flex items-center justify-center gap-4">
                 {mutationCandidates.map(card => (
                   <button
                     key={card.id}
                     onClick={() => handleMutationPick(card.id)}
-                    title={isGlacierEnvironment
-                      ? `感染后：\n❄️ ${glacierCardLabel(card.type)}\n\n与敌方卡牌平局时：\n返回手牌并恢复为普通牌`
-                      : `感染后：\n🌱 ${forestCardLabel(card.type)}·幼苗\n\n完整保留 1 次交锋后成熟\n成熟后命中可恢复 HP`
+                    title={isVolcanoEnvironment
+                      ? `感染后：\n🔥 ${volcanoCardLabel(card.type)}\n\n命中时：\n触发火山附加伤害`
+                      : isGlacierEnvironment
+                        ? `感染后：\n❄️ ${glacierCardLabel(card.type)}\n\n与敌方卡牌平局时：\n返回手牌并恢复为普通牌`
+                        : `感染后：\n🌱 ${forestCardLabel(card.type)}·幼苗\n\n完整保留 1 次交锋后成熟\n成熟后命中可恢复 HP`
                     }
-                    className={`group w-[126px] h-[154px] rounded-xl bg-surface border ${isGlacierEnvironment ? 'border-cyan-300/30 hover:border-cyan-200' : 'border-emerald-500/30 hover:border-emerald-300'} flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
+                    className={`group w-[126px] h-[154px] rounded-xl bg-surface border ${isVolcanoEnvironment ? 'border-orange-500/30 hover:border-orange-300' : isGlacierEnvironment ? 'border-cyan-300/30 hover:border-cyan-200' : 'border-emerald-500/30 hover:border-emerald-300'} flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
                   >
-                    <div className={`absolute top-2 right-2 text-[14px] ${isGlacierEnvironment ? 'drop-shadow-[0_0_6px_rgba(125,211,252,0.45)]' : 'drop-shadow-[0_0_6px_rgba(52,211,153,0.45)]'}`} aria-hidden="true">
-                      {isGlacierEnvironment ? '❄️' : '🌱'}
+                    <div className={`absolute top-2 right-2 text-[14px] ${isVolcanoEnvironment ? 'drop-shadow-[0_0_6px_rgba(251,146,60,0.45)]' : isGlacierEnvironment ? 'drop-shadow-[0_0_6px_rgba(125,211,252,0.45)]' : 'drop-shadow-[0_0_6px_rgba(52,211,153,0.45)]'}`} aria-hidden="true">
+                      {isVolcanoEnvironment ? '🔥' : isGlacierEnvironment ? '❄️' : '🌱'}
                     </div>
                     <CardIcon type={card.type} className="text-4xl mb-2" />
                     <div className="text-[10px] font-bold tracking-wider text-text-dim leading-relaxed">
                       <div>普通{plainCardLabel(card.type)}</div>
-                      <div className={isGlacierEnvironment ? 'text-cyan-100/90' : 'text-emerald-200/90'}>
-                        → {isGlacierEnvironment ? glacierCardLabel(card.type) : `${forestCardLabel(card.type)}·幼苗`}
+                      <div className={isVolcanoEnvironment ? 'text-orange-200/90' : isGlacierEnvironment ? 'text-cyan-100/90' : 'text-emerald-200/90'}>
+                        → {isForestEnvironment ? `${forestCardLabel(card.type)}·幼苗` : activeMutationCardLabel(card.type)}
                       </div>
                     </div>
-                    <div className={`absolute -bottom-20 left-1/2 hidden w-[188px] -translate-x-1/2 rounded-md border ${isGlacierEnvironment ? 'border-cyan-300/25 text-cyan-50/75' : 'border-emerald-500/25 text-emerald-100/75'} bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed shadow-xl group-hover:block`}>
-                      <div className={`font-black ${isGlacierEnvironment ? 'text-cyan-100' : 'text-emerald-200'}`}>感染后：</div>
-                      <div>{isGlacierEnvironment ? '❄️' : '🌱'} {isGlacierEnvironment ? glacierCardLabel(card.type) : `${forestCardLabel(card.type)}·幼苗`}</div>
-                      {isGlacierEnvironment ? (
+                    <div className={`absolute -bottom-20 left-1/2 hidden w-[188px] -translate-x-1/2 rounded-md border ${isVolcanoEnvironment ? 'border-orange-500/25 text-orange-100/75' : isGlacierEnvironment ? 'border-cyan-300/25 text-cyan-50/75' : 'border-emerald-500/25 text-emerald-100/75'} bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed shadow-xl group-hover:block`}>
+                      <div className={`font-black ${isVolcanoEnvironment ? 'text-orange-200' : isGlacierEnvironment ? 'text-cyan-100' : 'text-emerald-200'}`}>感染后：</div>
+                      <div>{isVolcanoEnvironment ? '🔥' : isGlacierEnvironment ? '❄️' : '🌱'} {isForestEnvironment ? `${forestCardLabel(card.type)}·幼苗` : activeMutationCardLabel(card.type)}</div>
+                      {isVolcanoEnvironment ? (
+                        <>
+                          <div className="mt-1 text-orange-100/55">命中时：</div>
+                          <div className="text-orange-100/55">触发火山附加伤害</div>
+                        </>
+                      ) : isGlacierEnvironment ? (
                         <>
                           <div className="mt-1 text-cyan-50/55">与敌方卡牌平局时：</div>
                           <div className="text-cyan-50/55">返回手牌并恢复为普通牌</div>
@@ -3335,13 +3478,13 @@ export default function App() {
                 transition={{ duration: 0.62, ease: 'easeInOut' }}
               >
                 <span className={`absolute text-[15px] ${isGlacierEnvironment ? 'drop-shadow-[0_0_8px_rgba(125,211,252,0.8)]' : 'drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]'}`}>
-                  {isGlacierEnvironment ? '❄️' : '🌱'}
+                  {isVolcanoEnvironment ? '🔥' : isGlacierEnvironment ? '❄️' : '🌱'}
                 </span>
                 <span className={`absolute -left-5 top-4 text-[10px] opacity-75 ${isGlacierEnvironment ? 'drop-shadow-[0_0_6px_rgba(125,211,252,0.65)]' : 'drop-shadow-[0_0_6px_rgba(52,211,153,0.65)]'}`}>
-                  {ACTIVE_ENVIRONMENT_CONFIG.icon}
+                  {activeEnvironmentConfig.icon}
                 </span>
                 <span className={`absolute left-5 top-7 text-[9px] opacity-60 ${isGlacierEnvironment ? 'drop-shadow-[0_0_6px_rgba(125,211,252,0.65)]' : 'drop-shadow-[0_0_6px_rgba(52,211,153,0.65)]'}`}>
-                  {isGlacierEnvironment ? '❄️' : '🌱'}
+                  {isVolcanoEnvironment ? '🔥' : isGlacierEnvironment ? '❄️' : '🌱'}
                 </span>
               </motion.div>
             );
@@ -3452,6 +3595,40 @@ export default function App() {
 
         .volcano-event-panel--pulse {
           animation: volcano-event-pulse 0.78s ease-in-out;
+        }
+
+        .route-event-panel {
+          overflow: hidden;
+          background: rgba(8, 10, 15, 0.92);
+          box-shadow: 0 0 16px rgba(255,255,255,0.05), inset 0 0 18px rgba(255,255,255,0.03);
+        }
+
+        .route-event-panel::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          opacity: 0.22;
+          background:
+            radial-gradient(circle at 16% 24%, rgba(255,255,255,0.20) 0 1px, transparent 2px),
+            radial-gradient(circle at 84% 74%, rgba(255,255,255,0.14) 0 1px, transparent 2px),
+            linear-gradient(118deg, transparent 0 30%, rgba(255,255,255,0.11) 30.5% 31.5%, transparent 32% 100%);
+        }
+
+        .route-event-panel--volcano {
+          border-color: rgba(249, 115, 22, 0.36);
+          background: rgba(19, 11, 8, 0.92);
+          box-shadow: 0 0 16px rgba(249,115,22,0.12), inset 0 0 18px rgba(249,115,22,0.04);
+        }
+
+        .route-event-panel--forest {
+          border-color: rgba(16, 185, 129, 0.34);
+          background: rgba(6, 19, 14, 0.92);
+          box-shadow: 0 0 16px rgba(16,185,129,0.12), inset 0 0 18px rgba(16,185,129,0.04);
+        }
+
+        .route-event-panel--pulse {
+          animation: route-event-pulse 0.78s ease-in-out;
         }
 
         .forest-event-panel {
@@ -3767,6 +3944,12 @@ export default function App() {
           0%, 100% { transform: translateX(-50%) scale(1); }
           38% { transform: translateX(-50%) scale(1.035); box-shadow: 0 0 26px rgba(249, 115, 22, 0.28); }
           64% { transform: translateX(-50%) scale(0.99); }
+        }
+
+        @keyframes route-event-pulse {
+          0%, 100% { transform: translateX(-50%) scale(1); }
+          38% { transform: translateX(-50%) scale(1.025); }
+          64% { transform: translateX(-50%) scale(0.995); }
         }
 
         @keyframes forest-breathe {

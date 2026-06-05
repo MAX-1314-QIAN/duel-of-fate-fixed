@@ -27,10 +27,17 @@ export const GLACIER_ENVIRONMENT_CONFIG = {
   maxMutationCardsPerSide: 3,
 } as const;
 
-export const ACTIVE_ENVIRONMENT_CONFIG = GLACIER_ENVIRONMENT_CONFIG;
+export const DEFAULT_ENVIRONMENT_ROUTE = ['VOLCANO', 'FOREST'] as const;
+
+export const ENVIRONMENT_ROUTE_CONFIG = {
+  roundsPerEnvironment: 4,
+  mutationIntervalRounds: 2,
+} as const;
+
+export const ACTIVE_ENVIRONMENT_CONFIG = VOLCANO_ENVIRONMENT_CONFIG;
 
 export const MUTATION_LIMIT = ACTIVE_ENVIRONMENT_CONFIG.maxMutationCardsPerSide;
-export const MUTATION_INTERVAL_ROUNDS = ACTIVE_ENVIRONMENT_CONFIG.mutationIntervalRounds;
+export const MUTATION_INTERVAL_ROUNDS = ENVIRONMENT_ROUTE_CONFIG.mutationIntervalRounds;
 
 const shuffleCards = (cards: Card[]) => [...cards].sort(() => Math.random() - 0.5);
 

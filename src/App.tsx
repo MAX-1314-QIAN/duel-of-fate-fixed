@@ -281,12 +281,12 @@ export default function App() {
     }, 1200);
   };
 
-  const showShortNotice = (msg: string) => {
+  const showShortNotice = (msg: string, duration = 2200) => {
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     setShortNotice(msg);
     noticeTimerRef.current = setTimeout(() => {
       setShortNotice(null);
-    }, 2200);
+    }, duration);
   };
   const logContainerRef = useRef<HTMLDivElement>(null);
 
@@ -1713,6 +1713,24 @@ export default function App() {
     setSelectedCards([]);
   };
 
+  const onAbandonDefense = () => {
+    if (isProcessing || state.winner || state.phase !== 'PLAYER_DEFEND') return;
+
+    if (selectedCards.length > 0) {
+      showShortNotice('请先取消已选择的防守牌', 1200);
+      return;
+    }
+
+    showShortNotice('玩家放弃防守', 700);
+    setState(prev => ({
+      ...prev,
+      guestPlayed: [],
+      phase: 'REVEAL',
+      lastAction: zhCN.logs.playerPass,
+    }));
+    setSelectedCards([]);
+  };
+
   const toggleSelect = (id: string) => {
     if (isRerollMode) {
       setRerollSelectedCardId(prev => prev === id ? null : id);
@@ -3026,6 +3044,23 @@ export default function App() {
               </button>
             )}
 
+            {!isRerollMode && state.phase === 'PLAYER_DEFEND' && (
+              <button
+                type="button"
+                onClick={onAbandonDefense}
+                disabled={!isPlayerTurnState || isProcessing || state.winner !== null}
+                className={`w-[150px] h-[40px] rounded-lg font-bold tracking-wider transition-all duration-200 active:scale-95 flex flex-col items-center justify-center leading-tight border
+                  ${selectedCards.length > 0
+                    ? 'bg-zinc-800/35 text-text-dim/45 border-zinc-700/35 cursor-pointer hover:border-zinc-500/40'
+                    : 'bg-[#1f1410]/80 text-orange-100 border-orange-500/35 shadow-lg shadow-orange-500/10 hover:bg-[#2a1811] cursor-pointer'
+                  }
+                  ${(!isPlayerTurnState || isProcessing || state.winner !== null) ? 'opacity-40 cursor-not-allowed hover:border-zinc-700/35' : ''}
+                `}
+              >
+                <span className="text-[11px] font-black tracking-wider">{zhCN.actions.pass}</span>
+              </button>
+            )}
+
             {/* BUTTON 2: RIGHT BUTTON */}
             {isRerollMode ? (
               <button 
@@ -3041,7 +3076,7 @@ export default function App() {
                 const hasSelected = selectedCards.length > 0;
                 
                 // Disable confirm play if: not player state, or processing, or if not defend (meaning attack) and selectedCards.length is 0
-                const rightDisabled = !isPlayerTurnState || isProcessing || (state.phase === 'PLAYER_ATTACK' && selectedCards.length === 0) || state.winner !== null;
+                const rightDisabled = !isPlayerTurnState || isProcessing || selectedCards.length === 0 || state.winner !== null;
 
                 let rightTextEng = zhCN.actions.confirmPlay;
                 let rightTextChn = "";
@@ -3051,7 +3086,7 @@ export default function App() {
                     rightTextEng = zhCN.actions.confirmDefense(selectedCards.length);
                     rightTextChn = "";
                   } else {
-                    rightTextEng = zhCN.actions.pass;
+                    rightTextEng = zhCN.actions.confirmDefense(0);
                     rightTextChn = "";
                   }
                 }

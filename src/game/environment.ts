@@ -167,6 +167,11 @@ export const applyMutationToCard = (
               forestMatureAfterClash: (completedClashCount ?? 0) + 1,
             }
           : {}),
+        ...(mutationType === 'GLACIER'
+          ? {
+              glacierEchoUsed: false,
+            }
+          : {}),
       }
     : card;
 
@@ -175,6 +180,7 @@ export const removeMutationFromCard = (card: Card): Card => {
     mutationType,
     forestGrowthStage,
     forestMatureAfterClash,
+    glacierEchoUsed,
     ...normalCard
   } = card;
 

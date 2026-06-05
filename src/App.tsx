@@ -181,8 +181,11 @@ export default function App() {
   } | null>(null);
   const [glacierRecycleFeedback, setGlacierRecycleFeedback] = useState<{
     targets: Array<'PLAYER' | 'AI'>;
+    echoByTarget?: Partial<Record<'PLAYER' | 'AI', boolean>>;
     token: number;
   } | null>(null);
+  const [glacierEchoCandidates, setGlacierEchoCandidates] = useState<Card[]>([]);
+  const continueAfterGlacierEchoRef = useRef<((selectedCardId?: string) => void) | null>(null);
   
   // Custom feedback states
   const [playerDiscardPrompt, setPlayerDiscardPrompt] = useState<string | null>(null);
@@ -431,6 +434,8 @@ export default function App() {
     setBurnFeedback(null);
     setForestRecoveryFeedback(null);
     setGlacierRecycleFeedback(null);
+    setGlacierEchoCandidates([]);
+    continueAfterGlacierEchoRef.current = null;
     continueAfterMutationRef.current = null;
     setPlayerDiscardPrompt(null);
     setAiDiscardPrompt(null);
@@ -550,6 +555,18 @@ export default function App() {
     }, 620);
   }, [finishMutationStage, mutationCandidates, pulseMutationEvent, scheduleSettlementTimer]);
 
+  const handleGlacierEchoPick = useCallback((cardId: string) => {
+    const selectedCandidate = glacierEchoCandidates.find(card => card.id === cardId);
+    if (!selectedCandidate) return;
+
+    setGlacierEchoCandidates([]);
+    const continueTurn = continueAfterGlacierEchoRef.current;
+    continueAfterGlacierEchoRef.current = null;
+    if (continueTurn) {
+      continueTurn(cardId);
+    }
+  }, [glacierEchoCandidates]);
+
   // --- SETTLEMENT LOGIC ---
   const handleSettlement = useCallback((hCards: Card[], gCards: Card[]) => {
     clearSettlementTimers();
@@ -641,7 +658,9 @@ export default function App() {
     const aiGlacierReclaims = glacierReclaims.filter(reclaim => ownerForSide(reclaim.side) === 'AI');
     playerGlacierReclaims.forEach(({ card }) => {
       resultLogs.push(`[冰川回收] ${glacierCardLabel(card.type)}形成平局，返回手牌`);
-      resultLogs.push('[冰川回收] 冰川牌失去异变属性，恢复为普通牌');
+      if (card.glacierEchoUsed) {
+        resultLogs.push('[冰川回收] 该冰川牌已使用过“极寒回响”');
+      }
     });
     if (aiGlacierReclaims.length > 0) {
       resultLogs.push(`[冰川回收] 对手有 ${aiGlacierReclaims.length} 张冰川牌形成平局并返回手牌`);
@@ -1189,52 +1208,123 @@ export default function App() {
       );
       const playerDiscardCards = playerPlayedCards.filter(card => !playerReclaimedIds.has(card.id));
       const aiDiscardCards = aiPlayedCards.filter(card => !aiReclaimedIds.has(card.id));
-      const playerReclaimedCards = glacierReclaims
+      const playerGlacierPlayedCount = playerPlayedCards.filter(card => card.mutationType === 'GLACIER').length;
+      const aiGlacierPlayedCount = aiPlayedCards.filter(card => card.mutationType === 'GLACIER').length;
+      const playerEchoCandidates = glacierReclaims
         .filter(reclaim => ownerForSide(reclaim.side) === 'PLAYER')
-        .map(reclaim => removeMutationFromCard(reclaim.card));
-      const aiReclaimedCards = glacierReclaims
+        .map(reclaim => reclaim.card)
+        .filter(card => !card.glacierEchoUsed);
+      const aiEchoCandidates = glacierReclaims
         .filter(reclaim => ownerForSide(reclaim.side) === 'AI')
-        .map(reclaim => removeMutationFromCard(reclaim.card));
+        .map(reclaim => reclaim.card)
+        .filter(card => !card.glacierEchoUsed);
+      const playerEchoTriggered = playerGlacierPlayedCount >= 2 && playerEchoCandidates.length > 0;
+      const aiEchoTriggered = !playerEchoTriggered && aiGlacierPlayedCount >= 2 && aiEchoCandidates.length > 0;
       const longestDiscardQueue = Math.max(playerDiscardCards.length, aiDiscardCards.length);
       const discardAnimationDuration = longestDiscardQueue > 0
         ? (longestDiscardQueue - 1) * 120 + 650
         : 250;
 
-      playerDiscardCards.forEach((card, index) => {
-        scheduleSettlementTimer(() => addAnimation('DISCARD', 512, 430, 902, 620, card.type), index * 120);
-      });
-      aiDiscardCards.forEach((card, index) => {
-        scheduleSettlementTimer(() => addAnimation('DISCARD', 512, 280, 750, 60, card.type), index * 120);
-      });
-      if (playerDiscardCards.length > 0) {
-        setPlayerDiscardPrompt(`${zhCN.resources.playerDiscard} +${playerDiscardCards.length}`);
-        scheduleSettlementTimer(() => setPlayerDiscardPrompt(null), 1500);
-      }
-      if (aiDiscardCards.length > 0) {
-        setAiDiscardPrompt(`${zhCN.resources.aiDiscard} +${aiDiscardCards.length}`);
-        scheduleSettlementTimer(() => setAiDiscardPrompt(null), 1500);
-      }
-      const recycleTargets = [
-        ...(playerReclaimedCards.length > 0 ? ['PLAYER' as const] : []),
-        ...(aiReclaimedCards.length > 0 ? ['AI' as const] : []),
-      ];
-      if (recycleTargets.length > 0) {
-        setGlacierRecycleFeedback({ targets: recycleTargets, token: Date.now() });
-        scheduleSettlementTimer(() => setGlacierRecycleFeedback(null), 850);
+      const applyGlacierReturnAndDiscard = (selectedEchoCardId?: string) => {
+        playerDiscardCards.forEach((card, index) => {
+          scheduleSettlementTimer(() => addAnimation('DISCARD', 512, 430, 902, 620, card.type), index * 120);
+        });
+        aiDiscardCards.forEach((card, index) => {
+          scheduleSettlementTimer(() => addAnimation('DISCARD', 512, 280, 750, 60, card.type), index * 120);
+        });
+        if (playerDiscardCards.length > 0) {
+          setPlayerDiscardPrompt(`${zhCN.resources.playerDiscard} +${playerDiscardCards.length}`);
+          scheduleSettlementTimer(() => setPlayerDiscardPrompt(null), 1500);
+        }
+        if (aiDiscardCards.length > 0) {
+          setAiDiscardPrompt(`${zhCN.resources.aiDiscard} +${aiDiscardCards.length}`);
+          scheduleSettlementTimer(() => setAiDiscardPrompt(null), 1500);
+        }
+        const aiSelectedEchoCard = aiEchoTriggered
+          ? selectAiMutationCandidate(aiEchoCandidates, stateRef.current.aiHand)
+          : null;
+        const selectedAiEchoCardId = aiSelectedEchoCard?.id;
+        const playerReturnCards = glacierReclaims
+          .filter(reclaim => ownerForSide(reclaim.side) === 'PLAYER')
+          .map(reclaim => (
+            reclaim.card.id === selectedEchoCardId
+              ? { ...reclaim.card, mutationType: 'GLACIER' as const, glacierEchoUsed: true }
+              : removeMutationFromCard(reclaim.card)
+          ));
+        const aiReturnCards = glacierReclaims
+          .filter(reclaim => ownerForSide(reclaim.side) === 'AI')
+          .map(reclaim => (
+            reclaim.card.id === selectedAiEchoCardId
+              ? { ...reclaim.card, mutationType: 'GLACIER' as const, glacierEchoUsed: true }
+              : removeMutationFromCard(reclaim.card)
+          ));
+        const echoLogs: string[] = [];
+
+        if (selectedEchoCardId) {
+          const selectedCard = playerEchoCandidates.find(card => card.id === selectedEchoCardId);
+          echoLogs.push(`[冰川回收] “${selectedCard ? glacierCardLabel(selectedCard.type) : '冰川牌'}”保留异变属性`);
+          echoLogs.push(`[冰川回收] “${selectedCard ? glacierCardLabel(selectedCard.type) : '冰川牌'}”已使用极寒回响次数：1 / 1`);
+        }
+
+        playerReturnCards
+          .filter(card => !card.mutationType)
+          .forEach(() => {
+            echoLogs.push('[冰川回收] 返回手牌并恢复为普通牌');
+          });
+
+        if (aiEchoTriggered) {
+          echoLogs.push('[羁绊] 对手触发“极寒回响”');
+          if (selectedAiEchoCardId) {
+            echoLogs.push('[冰川回收] 对手有 1 张冰川牌保留异变属性');
+          }
+        }
+
+        if (echoLogs.length > 0) {
+          setLogs(prev => [...prev, ...echoLogs]);
+        }
+
+        const recycleTargets = [
+          ...(playerReturnCards.length > 0 ? ['PLAYER' as const] : []),
+          ...(aiReturnCards.length > 0 ? ['AI' as const] : []),
+        ];
+        if (recycleTargets.length > 0) {
+          setGlacierRecycleFeedback({
+            targets: recycleTargets,
+            echoByTarget: {
+              PLAYER: Boolean(selectedEchoCardId),
+              AI: Boolean(selectedAiEchoCardId),
+            },
+            token: Date.now(),
+          });
+          scheduleSettlementTimer(() => setGlacierRecycleFeedback(null), 850);
+        }
+
+        setState(prev => {
+          const nextState = {
+            ...prev,
+            playerHand: [...prev.playerHand, ...playerReturnCards],
+            aiHand: [...prev.aiHand, ...aiReturnCards],
+            playerDiscardPile: [...prev.playerDiscardPile, ...playerDiscardCards],
+            aiDiscardPile: [...prev.aiDiscardPile, ...aiDiscardCards],
+          };
+          stateRef.current = nextState;
+          return nextState;
+        });
+        scheduleSettlementTimer(beginReplenishment, discardAnimationDuration);
+      };
+
+      if (playerEchoTriggered) {
+        setLogs(prev => [
+          ...prev,
+          '[羁绊] 触发“极寒回响”',
+          '[冰川回收] 请选择 1 张冰川牌保留异变属性',
+        ]);
+        setGlacierEchoCandidates(playerEchoCandidates);
+        continueAfterGlacierEchoRef.current = applyGlacierReturnAndDiscard;
+        return;
       }
 
-      setState(prev => {
-        const nextState = {
-          ...prev,
-          playerHand: [...prev.playerHand, ...playerReclaimedCards],
-          aiHand: [...prev.aiHand, ...aiReclaimedCards],
-          playerDiscardPile: [...prev.playerDiscardPile, ...playerDiscardCards],
-          aiDiscardPile: [...prev.aiDiscardPile, ...aiDiscardCards],
-        };
-        stateRef.current = nextState;
-        return nextState;
-      });
-      scheduleSettlementTimer(beginReplenishment, discardAnimationDuration);
+      applyGlacierReturnAndDiscard();
     };
 
     scheduleSettlementTimer(() => {
@@ -1567,8 +1657,12 @@ export default function App() {
   const selectedMatureForestCards = state.playerHand.filter(card =>
     selectedCards.includes(card.id) && isMatureForestCard(card)
   );
+  const selectedGlacierCards = state.playerHand.filter(card =>
+    selectedCards.includes(card.id) && card.mutationType === 'GLACIER'
+  );
   const showResonancePreview = selectedVolcanoCards.length >= 2 && !isRerollMode && isPlayerTurnState;
   const showSymbiosisPreview = selectedMatureForestCards.length >= 2 && !isRerollMode && isPlayerTurnState;
+  const showGlacierEchoPreview = selectedGlacierCards.length >= 2 && !isRerollMode && isPlayerTurnState;
   const mutationRoundsRemaining = state.drawPile.length === 0
     ? 0
     : MUTATION_INTERVAL_ROUNDS - completedClashesSinceMutation;
@@ -2764,6 +2858,12 @@ export default function App() {
                 <div className="text-[8px] font-semibold text-emerald-100/50 leading-tight">下一次感染提前 1 轮</div>
               </div>
             )}
+            {showGlacierEchoPreview && (
+              <div className={`absolute ${showResonancePreview || showSymbiosisPreview ? 'bottom-[132px]' : 'bottom-[84px]'} left-1/2 -translate-x-1/2 w-[280px] max-h-[48px] rounded-md border border-cyan-300/30 bg-[#06121a]/90 px-3 py-1.5 text-center font-mono shadow-[0_0_14px_rgba(34,211,238,0.12)] pointer-events-none`}>
+                <div className="text-[9.5px] font-black tracking-widest text-cyan-100 leading-tight">❄️ 极寒回响待触发</div>
+                <div className="mt-0.5 text-[8px] font-semibold text-cyan-50/65 leading-tight">至少 1 张冰川牌形成平局时，可保留 1 张异变牌</div>
+              </div>
+            )}
             {/* BUTTON 1: LEFT BUTTON */}
             {isRerollMode ? (
               <button 
@@ -2944,9 +3044,61 @@ export default function App() {
             transition={{ duration: 0.85, ease: 'easeOut' }}
             className="absolute left-1/2 top-[286px] z-[118] -translate-x-1/2 rounded-lg border border-cyan-300/35 bg-[#06121a]/92 px-4 py-2 text-center font-mono shadow-[0_0_24px_rgba(34,211,238,0.16)] pointer-events-none"
           >
-            <div className="text-[12px] font-black tracking-widest text-cyan-100">❄️ 冰封回收</div>
-            <div className="mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手牌</div>
+            {glacierRecycleFeedback.echoByTarget?.AI ? (
+              <>
+                <div className="text-[12px] font-black tracking-widest text-cyan-100">❄️ 对手触发极寒回响</div>
+                <div className="mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手牌</div>
+              </>
+            ) : glacierRecycleFeedback.echoByTarget?.PLAYER ? (
+              <>
+                <div className="text-[12px] font-black tracking-widest text-cyan-100">❄️ 极寒回响</div>
+                <div className="mt-1 text-[10px] font-bold text-cyan-50/72">选择 1 张冰川牌保留异变</div>
+              </>
+            ) : (
+              <>
+                <div className="text-[12px] font-black tracking-widest text-cyan-100">❄️ 冰封回收</div>
+                <div className="mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手牌</div>
+              </>
+            )}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {glacierEchoCandidates.length > 0 && (
+          <div className="absolute inset-0 flex items-center justify-center z-[142] pointer-events-none">
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 8 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0, y: 6 }}
+              transition={{ duration: 0.18 }}
+              className="w-[420px] rounded-xl border border-cyan-300/35 bg-[#06121a]/94 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(34,211,238,0.14)] backdrop-blur-md font-mono text-center pointer-events-auto"
+            >
+              <h3 className="text-cyan-100 text-sm font-black tracking-widest">❄️ 极寒回响</h3>
+              <p className="mt-1 text-[11px] text-cyan-50/75 font-semibold">请选择 1 张冰川牌保留异变属性</p>
+              <div className="mt-5 flex items-center justify-center gap-4">
+                {glacierEchoCandidates.map(card => (
+                  <button
+                    key={card.id}
+                    onClick={() => handleGlacierEchoPick(card.id)}
+                    title={`返回手牌后仍保留冰川属性\n每张冰川牌仅可保留 1 次`}
+                    className={`group w-[126px] h-[154px] rounded-xl bg-surface border border-cyan-300/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-cyan-200 hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
+                  >
+                    <div className="absolute top-2 right-2 text-[14px] drop-shadow-[0_0_6px_rgba(125,211,252,0.45)]" aria-hidden="true">❄️</div>
+                    <CardIcon type={card.type} className="text-4xl mb-2" />
+                    <div className="text-[10px] font-bold tracking-wider text-text-dim leading-relaxed">
+                      <div>{glacierCardLabel(card.type)}</div>
+                      <div className="text-cyan-100/90">保留冰川属性</div>
+                    </div>
+                    <div className="absolute -bottom-16 left-1/2 hidden w-[176px] -translate-x-1/2 rounded-md border border-cyan-300/25 bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed text-cyan-50/75 shadow-xl group-hover:block">
+                      <div>返回手牌后仍保留冰川属性</div>
+                      <div className="text-cyan-50/55">每张冰川牌仅可保留 1 次</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

@@ -8,6 +8,7 @@ export interface Card {
   mutationType?: MutationType;
   forestGrowthStage?: ForestGrowthStage;
   forestMatureAfterClash?: number;
+  glacierEchoUsed?: boolean;
 }
 
 export type PlayerRole = 'HOME' | 'GUEST';

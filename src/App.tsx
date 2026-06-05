@@ -158,6 +158,7 @@ export default function App() {
   const [mutationEventPulse, setMutationEventPulse] = useState(false);
   const [mutationAnimation, setMutationAnimation] = useState<{ side: 'PLAYER' | 'AI'; cardId?: string; token: number } | null>(null);
   const [mutatedCardGlowIds, setMutatedCardGlowIds] = useState<Record<string, boolean>>({});
+  const [maturedCardGlowIds, setMaturedCardGlowIds] = useState<Record<string, boolean>>({});
   const [playerMutationCountPulse, setPlayerMutationCountPulse] = useState(false);
   const [aiMutationCountPulse, setAiMutationCountPulse] = useState(false);
   const [resonanceAnimation, setResonanceAnimation] = useState<{ source: 'PLAYER' | 'AI'; target: 'PLAYER' | 'AI'; token: number } | null>(null);
@@ -409,6 +410,7 @@ export default function App() {
     setMutationEventPulse(false);
     setMutationAnimation(null);
     setMutatedCardGlowIds({});
+    setMaturedCardGlowIds({});
     setPlayerMutationCountPulse(false);
     setAiMutationCountPulse(false);
     setResonanceAnimation(null);
@@ -763,6 +765,7 @@ export default function App() {
     }
     if (forestMutationCountdownReduction > 0) {
       resultLogs.push('[环境事件] 下一次森林感染倒计时减少 1 轮');
+      pulseMutationEvent();
     }
     if (homeResonanceBonus > 0 || guestResonanceBonus > 0) {
       const burnTargets = [
@@ -848,9 +851,10 @@ export default function App() {
           },
           token: Date.now(),
         });
+        const recoveryFeedbackDuration = playerSymbiosisTriggered || aiSymbiosisTriggered ? 1000 : 720;
         scheduleSettlementTimer(() => {
           setForestRecoveryFeedback(null);
-        }, 1100);
+        }, recoveryFeedbackDuration);
       }
       setState(prev => ({
         ...prev,
@@ -924,11 +928,26 @@ export default function App() {
           hand: growthSnapshot.aiHand,
           completedClashCount: nextCompletedClashCount,
         });
-        const growthLogs = [...playerGrowth.maturedCards, ...aiGrowth.maturedCards]
+        const growthLogs = playerGrowth.maturedCards
           .map(card => `[森林成长] “${forestCardLabel(card.type)}”已成熟`);
-
+        const maturedIds = [...playerGrowth.maturedCards, ...aiGrowth.maturedCards].map(card => card.id);
         if (growthLogs.length > 0) {
           setLogs(logPrev => [...logPrev, ...growthLogs]);
+        }
+        if (maturedIds.length > 0) {
+          setMaturedCardGlowIds(prev => maturedIds.reduce(
+            (next, id) => ({ ...next, [id]: true }),
+            prev
+          ));
+          scheduleSettlementTimer(() => {
+            setMaturedCardGlowIds(prev => {
+              const next = { ...prev };
+              maturedIds.forEach(id => {
+                delete next[id];
+              });
+              return next;
+            });
+          }, 900);
         }
 
         const latest = {
@@ -1472,7 +1491,11 @@ export default function App() {
   const selectedVolcanoCards = state.playerHand.filter(card =>
     selectedCards.includes(card.id) && card.mutationType === 'VOLCANO'
   );
+  const selectedMatureForestCards = state.playerHand.filter(card =>
+    selectedCards.includes(card.id) && isMatureForestCard(card)
+  );
   const showResonancePreview = selectedVolcanoCards.length >= 2 && !isRerollMode && isPlayerTurnState;
+  const showSymbiosisPreview = selectedMatureForestCards.length >= 2 && !isRerollMode && isPlayerTurnState;
   const mutationRoundsRemaining = state.drawPile.length === 0
     ? 0
     : MUTATION_INTERVAL_ROUNDS - completedClashesSinceMutation;
@@ -1847,7 +1870,7 @@ export default function App() {
     <div className="w-[1024px] h-[768px] mx-auto bg-bg text-text-main flex flex-col font-sans border border-border overflow-hidden relative shadow-2xl">
       {/* Header */}
       <div className="h-20 px-10 flex items-center justify-between border-b border-border bg-surface/80 backdrop-blur-md z-20">
-        <div className={`relative w-[300px] p-1 rounded-lg transition-all duration-350 border border-transparent ${playerHPShake ? 'animate-hp-shake' : ''} ${burnFeedback?.targets.includes('PLAYER') ? 'burn-hp-feedback animate-burn-hp-shake' : ''} ${playerHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
+        <div className={`relative w-[300px] p-1 rounded-lg transition-all duration-350 border border-transparent ${playerHPShake ? 'animate-hp-shake' : ''} ${burnFeedback?.targets.includes('PLAYER') ? 'burn-hp-feedback animate-burn-hp-shake' : ''} ${forestRecoveryFeedback?.recoveryByTarget.PLAYER ? 'forest-recovery-hp-feedback' : ''} ${playerHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
           <div className="text-[12px] mb-1 text-text-dim tracking-wider">玩家</div>
           <div className="w-full h-3 bg-[#222] rounded-full overflow-hidden border border-[#333]">
             <motion.div 
@@ -1857,7 +1880,12 @@ export default function App() {
             />
           </div>
           <div className="flex justify-between mt-1 items-center font-mono opacity-80">
-            <span className="text-sm">{state.playerHP}/{INITIAL_HP}</span>
+            <span className="text-sm">
+              {state.playerHP}/{INITIAL_HP}
+              {forestRecoveryFeedback?.recoveryByTarget.PLAYER ? (
+                <span className="ml-2 text-[11px] font-black text-emerald-300 drop-shadow-[0_0_7px_rgba(52,211,153,0.55)]">+{forestRecoveryFeedback.recoveryByTarget.PLAYER}</span>
+              ) : null}
+            </span>
             <span className="text-[10px]">生命</span>
           </div>
           <AnimatePresence>
@@ -1883,7 +1911,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 4, scale: 0.94 }}
                 animate={{ opacity: [0, 1, 1, 0], y: [4, -16, -26], scale: [0.94, 1.02, 1] }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 1.05, ease: 'easeOut' }}
+                transition={{ duration: forestRecoveryFeedback.symbiosisByTarget.PLAYER ? 1 : 0.72, ease: 'easeOut' }}
                 className="absolute left-2 top-10 rounded-md border border-emerald-500/35 bg-black/78 px-2 py-1 font-mono text-[10px] font-black text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.22)] pointer-events-none text-left"
               >
                 <div>🌿 森林恢复</div>
@@ -1907,7 +1935,7 @@ export default function App() {
           <div className="text-[11px] text-accent font-bold tracking-widest">战斗引擎 V1.0</div>
         </div>
 
-        <div className={`relative w-[300px] text-right p-1 rounded-lg transition-all duration-350 border border-transparent ${aiHPShake ? 'animate-hp-shake' : ''} ${burnFeedback?.targets.includes('AI') ? 'burn-hp-feedback animate-burn-hp-shake' : ''} ${aiHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
+        <div className={`relative w-[300px] text-right p-1 rounded-lg transition-all duration-350 border border-transparent ${aiHPShake ? 'animate-hp-shake' : ''} ${burnFeedback?.targets.includes('AI') ? 'burn-hp-feedback animate-burn-hp-shake' : ''} ${forestRecoveryFeedback?.recoveryByTarget.AI ? 'forest-recovery-hp-feedback' : ''} ${aiHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
           <div className="text-[12px] mb-1 text-text-dim tracking-wider">对手</div>
           <div className="w-full h-3 bg-[#222] rounded-full overflow-hidden border border-[#333]">
             <motion.div 
@@ -1917,7 +1945,12 @@ export default function App() {
             />
           </div>
           <div className="flex justify-between mt-1 items-center font-mono opacity-80">
-            <span className="text-sm">{state.aiHP}/{INITIAL_HP}</span>
+            <span className="text-sm">
+              {state.aiHP}/{INITIAL_HP}
+              {forestRecoveryFeedback?.recoveryByTarget.AI ? (
+                <span className="ml-2 text-[11px] font-black text-emerald-300 drop-shadow-[0_0_7px_rgba(52,211,153,0.55)]">+{forestRecoveryFeedback.recoveryByTarget.AI}</span>
+              ) : null}
+            </span>
             <span className="text-[10px]">生命</span>
           </div>
           <AnimatePresence>
@@ -1943,7 +1976,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 4, scale: 0.94 }}
                 animate={{ opacity: [0, 1, 1, 0], y: [4, -16, -26], scale: [0.94, 1.02, 1] }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 1.05, ease: 'easeOut' }}
+                transition={{ duration: forestRecoveryFeedback.symbiosisByTarget.AI ? 1 : 0.72, ease: 'easeOut' }}
                 className="absolute right-2 top-10 rounded-md border border-emerald-500/35 bg-black/78 px-2 py-1 font-mono text-[10px] font-black text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.22)] pointer-events-none text-right"
               >
                 <div>🌿 森林恢复</div>
@@ -2067,13 +2100,23 @@ export default function App() {
             </motion.div>
           ) : (
             <div key="battle" className="flex flex-col gap-6 items-center relative">
-              <div className={`forest-event-panel absolute -top-16 left-1/2 -translate-x-1/2 w-[250px] rounded-md border border-emerald-500/25 bg-[#07120d]/82 px-3 py-2 text-center font-mono shadow-[0_0_14px_rgba(16,185,129,0.10)] ${mutationEventPulse ? 'forest-event-panel--pulse' : ''}`}>
-                <div className="flex items-center justify-center gap-1.5 text-[11px] font-black tracking-widest text-emerald-200">
+              <div className={`forest-event-panel absolute -top-16 left-1/2 -translate-x-1/2 w-[250px] rounded-md border border-emerald-500/30 bg-[#06130e]/88 px-3 py-2 text-center font-mono shadow-[0_0_16px_rgba(16,185,129,0.12),inset_0_0_18px_rgba(16,185,129,0.04)] ${mutationEventPulse ? 'forest-event-panel--pulse' : ''}`}>
+                <span className="forest-event-leaf forest-event-leaf--left" aria-hidden="true">⌁</span>
+                <span className="forest-event-leaf forest-event-leaf--right" aria-hidden="true">⌁</span>
+                <div className="relative z-10 flex items-center justify-center gap-1.5 text-[11px] font-black tracking-widest text-emerald-200">
                   <span className="text-[12px]" aria-hidden="true">{ACTIVE_ENVIRONMENT_CONFIG.icon}</span>
                   <span>{ACTIVE_ENVIRONMENT_CONFIG.name}</span>
                 </div>
-                <div className="text-[10px] font-semibold text-emerald-100/70 mt-0.5">
-                  {mutationEventStatus}
+                <div className="relative z-10 text-[10px] font-semibold text-emerald-100/76 mt-0.5">
+                  {mutationEventStatus.startsWith('下一次感染：') ? (
+                    <>
+                      下一次感染：
+                      <span className="mx-0.5 text-[12px] font-black text-emerald-200 drop-shadow-[0_0_7px_rgba(52,211,153,0.35)]">
+                        {mutationRoundsRemaining}
+                      </span>
+                      轮后
+                    </>
+                  ) : mutationEventStatus}
                 </div>
               </div>
 
@@ -2404,6 +2447,11 @@ export default function App() {
               
               const isEnvironment = log.includes('[环境事件]');
               const isPlayerMutation = log.includes('[玩家]') && log.includes('火山');
+              const isForestMutation = (log.includes('[玩家]') && log.includes('森林')) || (isEnvironment && log.includes('森林感染'));
+              const isForestGrowthLog = log.includes('[森林成长]');
+              const isForestRecoveryLog = log.includes('[森林恢复]') || (log.includes('[恢复]') && log.includes('森林'));
+              const isHpRecoveryLog = log.includes('[恢复]') && log.includes('HP');
+              const isSymbiosisLog = log.includes('[羁绊]') && log.includes('共生绽放');
               const isAiMutation = isEnvironment && log.includes('对手获得');
               const isMutationLimit = isEnvironment && log.includes('上限');
               const isMutationClosed = isEnvironment && log.includes('耗尽');
@@ -2412,7 +2460,12 @@ export default function App() {
               const isBurnLog = log.includes('[灼烧]');
               
               let textColor = 'text-text-dim';
-              if (isBondLog) textColor = 'text-orange-300';
+              if (isSymbiosisLog) textColor = 'text-teal-300 font-semibold';
+              else if (isForestRecoveryLog) textColor = 'text-emerald-300 font-semibold';
+              else if (isHpRecoveryLog) textColor = 'text-emerald-200/90';
+              else if (isForestGrowthLog) textColor = 'text-emerald-400/90';
+              else if (isForestMutation) textColor = 'text-lime-300/85';
+              else if (isBondLog) textColor = 'text-orange-300';
               else if (isBurnLog) textColor = 'text-orange-500/90';
               else if (isVolcanoDamage) textColor = 'text-orange-500/90';
               else if (isMutationClosed) textColor = 'text-zinc-500';
@@ -2564,18 +2617,23 @@ export default function App() {
                       card w-[90px] h-[120px] rounded-xl bg-surface border transition-all flex flex-col items-center justify-center relative card-shadow
                       ${isShaking ? 'animate-shake-card' : ''}
                       ${card.mutationType === 'VOLCANO' ? `lava-card ${mutatedCardGlowIds[card.id] ? 'lava-card--fresh' : ''}` : ''}
-                      ${card.mutationType === 'FOREST' ? `forest-card ${mutatedCardGlowIds[card.id] ? 'forest-card--fresh' : ''}` : ''}
+                      ${card.mutationType === 'FOREST' ? `forest-card forest-card--${card.forestGrowthStage === 'MATURE' ? 'mature' : 'seedling'} ${mutatedCardGlowIds[card.id] ? 'forest-card--fresh' : ''} ${maturedCardGlowIds[card.id] ? 'forest-card--growing' : ''}` : ''}
                       ${customInteractiveClass}
                       ${getCardBorderClass(card.type)}
                       ${isSelected ? 'border-accent -translate-y-4 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'border-border'}
                     `}
                   >
-                    <CardIcon type={card.type} className="text-4xl mb-2" />
+                    {maturedCardGlowIds[card.id] && (
+                      <div className="absolute -top-7 left-1/2 -translate-x-1/2 rounded-md border border-emerald-400/35 bg-black/75 px-2 py-1 text-[10px] font-black tracking-widest text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.22)] pointer-events-none">
+                        🌿 已成熟
+                      </div>
+                    )}
+                    <CardIcon type={card.type} className="relative z-10 text-4xl mb-2" />
                     <div className="text-[10px] font-bold tracking-wider text-text-dim">
                       {card.mutationType === 'VOLCANO'
                         ? volcanoCardLabel(card.type)
                         : card.mutationType === 'FOREST'
-                          ? forestCardLabel(card.type)
+                          ? `${forestIcon(card)} ${forestCardLabel(card.type)}`
                           : cardLabel(card.type)}
                     </div>
                     {card.mutationType === 'FOREST' && (
@@ -2604,6 +2662,13 @@ export default function App() {
               <div className="absolute bottom-[84px] left-1/2 -translate-x-1/2 w-[220px] max-h-[44px] rounded-md border border-orange-500/25 bg-[#130b08]/88 px-2.5 py-1.5 text-center font-mono shadow-[0_0_12px_rgba(249,115,22,0.10)] pointer-events-none">
                 <div className="text-[9.5px] font-black tracking-widest text-orange-200 leading-tight">{VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣已激活</div>
                 <div className="mt-0.5 text-[8px] font-semibold text-orange-100/60 leading-tight">火山牌命中后额外造成 {VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage} 点伤害</div>
+              </div>
+            )}
+            {showSymbiosisPreview && (
+              <div className={`absolute ${showResonancePreview ? 'bottom-[132px]' : 'bottom-[84px]'} left-1/2 -translate-x-1/2 w-[250px] max-h-[48px] rounded-md border border-emerald-500/30 bg-[#07140f]/90 px-3 py-1.5 text-center font-mono shadow-[0_0_14px_rgba(16,185,129,0.12)] pointer-events-none`}>
+                <div className="text-[9.5px] font-black tracking-widest text-emerald-200 leading-tight">🌿 共生绽放已激活</div>
+                <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/65 leading-tight">命中后恢复最多 2 HP</div>
+                <div className="text-[8px] font-semibold text-emerald-100/50 leading-tight">下一次感染提前 1 轮</div>
               </div>
             )}
             {/* BUTTON 1: LEFT BUTTON */}
@@ -2754,6 +2819,28 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {forestRecoveryFeedback && (
+          forestRecoveryFeedback.symbiosisByTarget.PLAYER || forestRecoveryFeedback.symbiosisByTarget.AI
+        ) && (
+          <motion.div
+            key={`forest-symbiosis-burst-${forestRecoveryFeedback.token}`}
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+            animate={{ opacity: [0, 1, 1, 0], y: [8, 0, -2, -6], scale: [0.96, 1, 1, 0.98] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1, ease: 'easeOut' }}
+            className="forest-symbiosis-burst absolute left-1/2 top-[286px] z-[118] -translate-x-1/2 rounded-lg border border-emerald-400/35 bg-[#06130e]/92 px-4 py-2 text-center font-mono shadow-[0_0_28px_rgba(16,185,129,0.18)] pointer-events-none"
+          >
+            <div className="forest-symbiosis-link" aria-hidden="true" />
+            <div className="relative z-10 text-[12px] font-black tracking-widest text-emerald-200">
+              🌿 {forestRecoveryFeedback.symbiosisByTarget.AI ? '对手触发共生绽放' : '共生绽放'}
+            </div>
+            <div className="relative z-10 mt-1 text-[10px] font-bold text-emerald-100/75">森林恢复：+2 HP</div>
+            <div className="relative z-10 text-[9px] font-semibold text-emerald-100/55">下一次感染提前 1 轮</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Forest mutation selection */}
       <AnimatePresence>
         {mutationCandidates.length > 0 && (
@@ -2765,14 +2852,14 @@ export default function App() {
               transition={{ duration: 0.18 }}
               className="w-[420px] rounded-xl border border-emerald-500/35 bg-[#07120d]/92 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(16,185,129,0.12)] backdrop-blur-md font-mono text-center pointer-events-auto"
             >
-              <h3 className="text-emerald-200 text-sm font-black tracking-widest">森林感染</h3>
+              <h3 className="text-emerald-200 text-sm font-black tracking-widest">🌿 森林感染</h3>
               <p className="mt-1 text-[11px] text-emerald-100/75 font-semibold">请选择 1 张手牌感染为森林幼苗</p>
               <div className="mt-5 flex items-center justify-center gap-4">
                 {mutationCandidates.map(card => (
                   <button
                     key={card.id}
                     onClick={() => handleMutationPick(card.id)}
-                    title="感染后成为森林幼苗"
+                    title={`感染后：\n🌱 ${forestCardLabel(card.type)}·幼苗\n\n完整保留 1 次交锋后成熟\n成熟后命中可恢复 HP`}
                     className={`group w-[126px] h-[154px] rounded-xl bg-surface border border-emerald-500/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-emerald-300 hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
                   >
                     <div className="absolute top-2 right-2 text-[14px] drop-shadow-[0_0_6px_rgba(52,211,153,0.45)]" aria-hidden="true">🌱</div>
@@ -2781,9 +2868,11 @@ export default function App() {
                       <div>普通{plainCardLabel(card.type)}</div>
                       <div className="text-emerald-200/90">→ {forestCardLabel(card.type)}·幼苗</div>
                     </div>
-                    <div className="absolute -bottom-11 left-1/2 hidden w-[160px] -translate-x-1/2 rounded-md border border-emerald-500/25 bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed text-emerald-100/75 shadow-xl group-hover:block">
-                      <div>感染后成为森林幼苗</div>
-                      <div className="text-emerald-100/45">保留原猜拳属性</div>
+                    <div className="absolute -bottom-20 left-1/2 hidden w-[188px] -translate-x-1/2 rounded-md border border-emerald-500/25 bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed text-emerald-100/75 shadow-xl group-hover:block">
+                      <div className="font-black text-emerald-200">感染后：</div>
+                      <div>🌱 {forestCardLabel(card.type)}·幼苗</div>
+                      <div className="mt-1 text-emerald-100/55">完整保留 1 次交锋后成熟</div>
+                      <div className="text-emerald-100/55">成熟后命中可恢复 HP</div>
                     </div>
                   </button>
                 ))}
@@ -3029,6 +3118,13 @@ export default function App() {
           box-shadow: 0 0 18px rgba(249, 115, 22, 0.24), inset 0 0 0 1px rgba(251, 146, 60, 0.12);
         }
 
+        .forest-recovery-hp-feedback {
+          background: rgba(16, 185, 129, 0.08);
+          border-color: rgba(52, 211, 153, 0.45) !important;
+          box-shadow: 0 0 18px rgba(16, 185, 129, 0.22), inset 0 0 0 1px rgba(52, 211, 153, 0.10);
+          animation: forest-hp-pulse 0.72s ease-out;
+        }
+
         .animate-burn-hp-shake {
           animation: burn-hp-shake-kf 0.72s ease-out;
         }
@@ -3041,6 +3137,11 @@ export default function App() {
           64% { transform: translateX(2px); }
         }
 
+        @keyframes forest-hp-pulse {
+          0%, 100% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.10), inset 0 0 0 1px rgba(52, 211, 153, 0.08); }
+          42% { box-shadow: 0 0 24px rgba(16, 185, 129, 0.30), inset 0 0 0 1px rgba(110, 231, 183, 0.24); }
+        }
+
         .volcano-event-panel {
           animation: volcano-breathe 3.8s ease-in-out infinite;
         }
@@ -3050,8 +3151,35 @@ export default function App() {
         }
 
         .forest-event-panel {
+          overflow: hidden;
           animation: forest-breathe 3.8s ease-in-out infinite;
         }
+
+        .forest-event-panel::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          opacity: 0.26;
+          pointer-events: none;
+          background:
+            radial-gradient(circle at 18% 24%, rgba(52, 211, 153, 0.18) 0 1px, transparent 2px),
+            radial-gradient(circle at 78% 68%, rgba(110, 231, 183, 0.16) 0 1px, transparent 2px),
+            linear-gradient(128deg, transparent 0 18%, rgba(52, 211, 153, 0.14) 18.5% 19.5%, transparent 20% 100%),
+            linear-gradient(32deg, transparent 0 72%, rgba(16, 185, 129, 0.14) 72.5% 73.5%, transparent 74% 100%);
+        }
+
+        .forest-event-leaf {
+          position: absolute;
+          top: 8px;
+          color: rgba(110, 231, 183, 0.34);
+          font-size: 24px;
+          line-height: 1;
+          pointer-events: none;
+          transform: rotate(-18deg);
+        }
+
+        .forest-event-leaf--left { left: 10px; }
+        .forest-event-leaf--right { right: 10px; transform: rotate(18deg) scaleX(-1); }
 
         .forest-event-panel--pulse {
           animation: forest-event-pulse 0.78s ease-in-out;
@@ -3087,8 +3215,96 @@ export default function App() {
           overflow: hidden;
         }
 
+        .forest-card.border-accent {
+          border-color: rgb(245, 158, 11) !important;
+        }
+
+        .forest-card::before,
+        .forest-card::after {
+          content: "";
+          position: absolute;
+          inset: 6px;
+          border-radius: 9px;
+          pointer-events: none;
+        }
+
+        .forest-card::before {
+          opacity: 0.42;
+          background:
+            radial-gradient(circle at 9% 18%, rgba(134, 239, 172, 0.36) 0 1px, transparent 2px),
+            radial-gradient(circle at 12% 78%, rgba(134, 239, 172, 0.28) 0 1px, transparent 2px),
+            radial-gradient(circle at 88% 24%, rgba(134, 239, 172, 0.28) 0 1px, transparent 2px),
+            radial-gradient(circle at 84% 82%, rgba(134, 239, 172, 0.24) 0 1px, transparent 2px);
+        }
+
+        .forest-card::after {
+          opacity: 0.34;
+          background:
+            linear-gradient(90deg, rgba(52, 211, 153, 0.28), transparent 18%, transparent 82%, rgba(52, 211, 153, 0.22)),
+            linear-gradient(0deg, rgba(52, 211, 153, 0.20), transparent 18%, transparent 82%, rgba(52, 211, 153, 0.16));
+        }
+
+        .forest-card--seedling {
+          border-color: rgba(74, 222, 128, 0.45) !important;
+          box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.10), 0 0 10px rgba(74, 222, 128, 0.08);
+        }
+
+        .forest-card--mature {
+          border-color: rgba(52, 211, 153, 0.70) !important;
+          box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.20), 0 0 14px rgba(16, 185, 129, 0.14);
+          animation: forest-card-breathe 4.6s ease-in-out infinite;
+        }
+
+        .forest-card--mature::after {
+          opacity: 0.54;
+          background:
+            linear-gradient(90deg, rgba(52, 211, 153, 0.34), transparent 20%, transparent 78%, rgba(52, 211, 153, 0.30)),
+            linear-gradient(0deg, rgba(52, 211, 153, 0.26), transparent 18%, transparent 80%, rgba(52, 211, 153, 0.24)),
+            linear-gradient(135deg, transparent 0 36%, rgba(110, 231, 183, 0.22) 36.5% 37.5%, transparent 38% 100%);
+        }
+
+        .forest-card.border-accent {
+          border-color: rgb(245, 158, 11) !important;
+        }
+
         .forest-card--fresh {
           animation: forest-card-arrive 0.9s ease-out;
+        }
+
+        .forest-card--growing {
+          animation: forest-grow-card 0.82s ease-out;
+        }
+
+        .forest-card--growing::after {
+          animation: forest-vine-grow 0.82s ease-out;
+        }
+
+        .forest-symbiosis-burst {
+          overflow: hidden;
+        }
+
+        .forest-symbiosis-burst::before,
+        .forest-symbiosis-burst::after {
+          content: "•";
+          position: absolute;
+          top: 18px;
+          color: rgba(110, 231, 183, 0.70);
+          font-size: 18px;
+          filter: drop-shadow(0 0 7px rgba(52, 211, 153, 0.55));
+          animation: forest-particle-flow 0.95s ease-out;
+        }
+
+        .forest-symbiosis-burst::before { left: 18px; }
+        .forest-symbiosis-burst::after { right: 18px; animation-direction: reverse; }
+
+        .forest-symbiosis-link {
+          position: absolute;
+          left: 16px;
+          right: 16px;
+          top: 18px;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(110, 231, 183, 0.62), transparent);
+          box-shadow: 0 0 12px rgba(52, 211, 153, 0.28);
         }
 
         @keyframes volcano-breathe {
@@ -3111,6 +3327,29 @@ export default function App() {
           0%, 100% { transform: translateX(-50%) scale(1); }
           38% { transform: translateX(-50%) scale(1.035); box-shadow: 0 0 26px rgba(16, 185, 129, 0.28); }
           64% { transform: translateX(-50%) scale(0.99); }
+        }
+
+        @keyframes forest-card-breathe {
+          0%, 100% { box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.18), 0 0 12px rgba(16, 185, 129, 0.12); }
+          50% { box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.28), 0 0 18px rgba(16, 185, 129, 0.20); }
+        }
+
+        @keyframes forest-grow-card {
+          0% { filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.12), 0 0 8px rgba(16, 185, 129, 0.08); }
+          36% { filter: brightness(1.16); box-shadow: inset 0 0 0 1px rgba(190, 242, 100, 0.36), 0 0 28px rgba(52, 211, 153, 0.32); }
+          100% { filter: brightness(1); box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.20), 0 0 14px rgba(16, 185, 129, 0.14); }
+        }
+
+        @keyframes forest-vine-grow {
+          0% { clip-path: inset(0 50% 100% 50%); opacity: 0.10; }
+          42% { clip-path: inset(0 22% 40% 22%); opacity: 0.45; }
+          100% { clip-path: inset(0); opacity: 0.58; }
+        }
+
+        @keyframes forest-particle-flow {
+          0% { transform: translateX(-24px) scale(0.7); opacity: 0; }
+          35% { opacity: 1; }
+          100% { transform: translateX(72px) scale(1); opacity: 0; }
         }
 
         @keyframes lava-card-breathe {
@@ -3156,14 +3395,14 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
     <motion.div 
       initial={{ scale: 0.8, opacity: 0, y: 10 }}
       animate={{ scale: 1, opacity: 1, y: 0 }}
-      className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl ${getCardBorderClass(card.type)} ${card.mutationType === 'VOLCANO' ? 'lava-card' : ''} ${card.mutationType === 'FOREST' ? 'forest-card' : ''}`}
+      className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl ${getCardBorderClass(card.type)} ${card.mutationType === 'VOLCANO' ? 'lava-card' : ''} ${card.mutationType === 'FOREST' ? `forest-card forest-card--${card.forestGrowthStage === 'MATURE' ? 'mature' : 'seedling'}` : ''}`}
     >
-      <CardIcon type={card.type} className="text-3xl mb-1" />
+      <CardIcon type={card.type} className="relative z-10 text-3xl mb-1" />
       <span className="text-[9px] font-black tracking-widest opacity-40">
         {card.mutationType === 'VOLCANO'
           ? volcanoCardLabel(card.type)
           : card.mutationType === 'FOREST'
-            ? forestCardLabel(card.type)
+            ? `${forestIcon(card)} ${forestCardLabel(card.type)}`
             : cardLabel(card.type)}
       </span>
       {card.mutationType === 'FOREST' && (

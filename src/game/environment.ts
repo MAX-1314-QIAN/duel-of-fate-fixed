@@ -11,8 +11,18 @@ export const VOLCANO_ENVIRONMENT_CONFIG = {
   resonanceBonusDamage: 1,
 } as const;
 
-export const MUTATION_LIMIT = VOLCANO_ENVIRONMENT_CONFIG.maxMutationCardsPerSide;
-export const MUTATION_INTERVAL_ROUNDS = VOLCANO_ENVIRONMENT_CONFIG.mutationIntervalRounds;
+export const FOREST_ENVIRONMENT_CONFIG = {
+  id: 'FOREST',
+  name: '森林事件',
+  icon: '🌿',
+  mutationIntervalRounds: 2,
+  maxMutationCardsPerSide: 3,
+} as const;
+
+export const ACTIVE_ENVIRONMENT_CONFIG = FOREST_ENVIRONMENT_CONFIG;
+
+export const MUTATION_LIMIT = ACTIVE_ENVIRONMENT_CONFIG.maxMutationCardsPerSide;
+export const MUTATION_INTERVAL_ROUNDS = ACTIVE_ENVIRONMENT_CONFIG.mutationIntervalRounds;
 
 const shuffleCards = (cards: Card[]) => [...cards].sort(() => Math.random() - 0.5);
 
@@ -28,6 +38,12 @@ export const getMutationCandidates = (hand: Card[]) => {
 
 export const countMutatedCards = (hand: Card[]) =>
   hand.filter(card => card.mutationType === 'VOLCANO').length;
+
+export const getForestMutationCandidates = (hand: Card[]) =>
+  shuffleCards(hand.filter(card => !card.mutationType)).slice(0, 2);
+
+export const countAllMutatedCards = (hand: Card[]) =>
+  hand.filter(card => card.mutationType).length;
 
 export const calculateVolcanoMutationBonus = (successfulVolcanoHits: number) =>
   Math.min(successfulVolcanoHits, VOLCANO_ENVIRONMENT_CONFIG.maxMutationDamageBonusPerClash);
@@ -100,7 +116,46 @@ export const selectAiMutationCandidate = (candidates: Card[], aiHand: Card[]) =>
 export const applyMutationToCard = (
   cardId: string,
   mutationType: MutationType,
+  completedClashCount?: number,
 ) => (card: Card): Card =>
   card.id === cardId && !card.mutationType
-    ? { ...card, mutationType }
+    ? {
+        ...card,
+        mutationType,
+        ...(mutationType === 'FOREST'
+          ? {
+              forestGrowthStage: 'SEEDLING' as const,
+              forestMatureAfterClash: (completedClashCount ?? 0) + 1,
+            }
+          : {}),
+      }
     : card;
+
+export const advanceForestGrowth = ({
+  hand,
+  completedClashCount,
+}: {
+  hand: Card[];
+  completedClashCount: number;
+}) => {
+  const maturedCards: Card[] = [];
+  const nextHand = hand.map(card => {
+    if (
+      card.mutationType !== 'FOREST'
+      || card.forestGrowthStage !== 'SEEDLING'
+      || card.forestMatureAfterClash === undefined
+      || card.forestMatureAfterClash > completedClashCount
+    ) {
+      return card;
+    }
+
+    const maturedCard = {
+      ...card,
+      forestGrowthStage: 'MATURE' as const,
+    };
+    maturedCards.push(maturedCard);
+    return maturedCard;
+  });
+
+  return { hand: nextHand, maturedCards };
+};

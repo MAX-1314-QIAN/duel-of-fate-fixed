@@ -5,14 +5,16 @@ import { Card, CardType, GameState, WIN_MAP } from './types';
 import { zhCN } from './locales/zh-CN';
 import { allocateLimitedSharedDeckDraws, DrawQueueItem } from './game/sharedDeck';
 import {
+  ACTIVE_ENVIRONMENT_CONFIG,
   MUTATION_INTERVAL_ROUNDS,
   MUTATION_LIMIT,
   VOLCANO_ENVIRONMENT_CONFIG,
+  advanceForestGrowth,
   applyMutationToCard,
   calculateVolcanoDamage,
   canTriggerMutation,
-  countMutatedCards,
-  getMutationCandidates,
+  countAllMutatedCards,
+  getForestMutationCandidates,
   selectAiMutationCandidate,
 } from './game/environment';
 
@@ -43,8 +45,17 @@ const createDeck = (): Card[] => {
 const cardLabel = (type: CardType) => zhCN.cards[type];
 const plainCardLabel = (type: CardType) => CARD_NAME_ZH[type];
 const volcanoCardLabel = (type: CardType) => `火山${CARD_NAME_ZH[type]}`;
+const forestCardLabel = (type: CardType) => `森林${CARD_NAME_ZH[type]}`;
+const forestStageLabel = (card: Card) =>
+  card.forestGrowthStage === 'MATURE' ? '成熟' : '幼苗';
+const forestIcon = (card: Card) =>
+  card.forestGrowthStage === 'MATURE' ? '🌿' : '🌱';
 const battleCardLabel = (card: Card) =>
-  card.mutationType === 'VOLCANO' ? volcanoCardLabel(card.type) : cardLabel(card.type);
+  card.mutationType === 'VOLCANO'
+    ? volcanoCardLabel(card.type)
+    : card.mutationType === 'FOREST'
+      ? forestCardLabel(card.type)
+      : cardLabel(card.type);
 
 const buildVolcanoDamageLog = (damagingCards: Card[], volcanoBonus: number) => {
   if (volcanoBonus <= 0) return null;
@@ -107,6 +118,7 @@ export default function App() {
 
   const settlementTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const continueAfterMutationRef = useRef<(() => void) | null>(null);
+  const completedClashCountRef = useRef(0);
   const clearSettlementTimers = useCallback(() => {
     settlementTimersRef.current.forEach(timer => clearTimeout(timer));
     settlementTimersRef.current = [];
@@ -137,6 +149,7 @@ export default function App() {
   const [hasLoggedDepletion, setHasLoggedDepletion] = useState<boolean>(false);
   const [resourceDepletedWinnerDetail, setResourceDepletedWinnerDetail] = useState<{ eng: string; chn: string } | null>(null);
   const [completedClashesSinceMutation, setCompletedClashesSinceMutation] = useState(0);
+  const [completedClashCount, setCompletedClashCount] = useState(0);
   const [mutationCandidates, setMutationCandidates] = useState<Card[]>([]);
   const [mutationPhaseNotice, setMutationPhaseNotice] = useState<string | null>(null);
   const [mutationEventPulse, setMutationEventPulse] = useState(false);
@@ -380,6 +393,8 @@ export default function App() {
     setHasLoggedDepletion(false);
     setResourceDepletedWinnerDetail(null);
     setCompletedClashesSinceMutation(0);
+    setCompletedClashCount(0);
+    completedClashCountRef.current = 0;
     setMutationCandidates([]);
     setMutationPhaseNotice(null);
     setMutationEventPulse(false);
@@ -427,25 +442,25 @@ export default function App() {
         ? prev.playerHand.find(card => card.id === playerCardId)
         : undefined;
       const playerHand = playerCardId
-        ? prev.playerHand.map(applyMutationToCard(playerCardId, 'VOLCANO'))
+        ? prev.playerHand.map(applyMutationToCard(playerCardId, 'FOREST', completedClashCountRef.current))
         : prev.playerHand;
 
       if (playerCardId) {
-        logsToAppend.push(`[玩家] 获得“${selectedPlayerCard ? volcanoCardLabel(selectedPlayerCard.type) : '火山异变牌'}”`);
+        logsToAppend.push(`[玩家] 获得“${selectedPlayerCard ? `${forestCardLabel(selectedPlayerCard.type)}·幼苗` : '森林异变牌·幼苗'}”`);
       }
 
       let aiHand = prev.aiHand;
-      if (countMutatedCards(aiHand) >= MUTATION_LIMIT) {
+      if (countAllMutatedCards(aiHand) >= MUTATION_LIMIT) {
         logsToAppend.push('[环境事件] 对手异变牌已达上限，本次感染跳过');
       } else {
-        const aiCandidates = getMutationCandidates(aiHand);
+        const aiCandidates = getForestMutationCandidates(aiHand);
         const selectedAiCard = selectAiMutationCandidate(aiCandidates, aiHand);
         if (selectedAiCard) {
-          aiHand = aiHand.map(applyMutationToCard(selectedAiCard.id, 'VOLCANO'));
-          logsToAppend.push('[环境事件] 对手获得 1 张火山异变牌');
+          aiHand = aiHand.map(applyMutationToCard(selectedAiCard.id, 'FOREST', completedClashCountRef.current));
+          logsToAppend.push('[环境事件] 对手获得 1 张森林异变牌');
           setMutationAnimation({ side: 'AI', token: Date.now() });
           setAiMutationCountPulse(true);
-          showMutationPhaseNotice('对手完成火山感染', 700);
+          showMutationPhaseNotice('对手完成森林感染', 700);
           scheduleSettlementTimer(() => {
             setMutationAnimation(null);
             setAiMutationCountPulse(false);
@@ -470,7 +485,7 @@ export default function App() {
     if (playerCardId) {
       setMutatedCardGlowIds(prev => ({ ...prev, [playerCardId]: true }));
       setPlayerMutationCountPulse(true);
-      showMutationPhaseNotice('火山感染完成', 650);
+      showMutationPhaseNotice('森林感染完成', 650);
       scheduleSettlementTimer(() => {
         setMutatedCardGlowIds(prev => {
           const next = { ...prev };
@@ -791,7 +806,33 @@ export default function App() {
       setSettlementSubPhase('replenish-complete');
       setLogs(prev => [...prev, zhCN.logs.replenishComplete]);
       scheduleSettlementTimer(() => {
-        const latest = stateRef.current;
+        const nextCompletedClashCount = completedClashCount + 1;
+        setCompletedClashCount(nextCompletedClashCount);
+        completedClashCountRef.current = nextCompletedClashCount;
+        const growthSnapshot = stateRef.current;
+        const playerGrowth = advanceForestGrowth({
+          hand: growthSnapshot.playerHand,
+          completedClashCount: nextCompletedClashCount,
+        });
+        const aiGrowth = advanceForestGrowth({
+          hand: growthSnapshot.aiHand,
+          completedClashCount: nextCompletedClashCount,
+        });
+        const growthLogs = [...playerGrowth.maturedCards, ...aiGrowth.maturedCards]
+          .map(card => `[森林成长] “${forestCardLabel(card.type)}”已成熟`);
+
+        if (growthLogs.length > 0) {
+          setLogs(logPrev => [...logPrev, ...growthLogs]);
+        }
+
+        const latest = {
+          ...growthSnapshot,
+          playerHand: playerGrowth.hand,
+          aiHand: aiGrowth.hand,
+        };
+        stateRef.current = latest;
+        setState(latest);
+
         const nextMutationCount = completedClashesSinceMutation + 1;
 
         if (latest.drawPile.length <= 0) {
@@ -804,25 +845,25 @@ export default function App() {
           setCompletedClashesSinceMutation(nextMutationCount);
           const roundsRemaining = MUTATION_INTERVAL_ROUNDS - nextMutationCount;
           if (roundsRemaining === 1) {
-            setLogs(prev => [...prev, '[环境事件] 火山感染将在 1 轮后触发']);
+            setLogs(prev => [...prev, '[环境事件] 森林感染将在 1 轮后触发']);
           }
           scheduleSettlementTimer(finishTurn, 350);
           return;
         }
 
         setCompletedClashesSinceMutation(0);
-        setLogs(prev => [...prev, '[环境事件] 火山感染已触发']);
+        setLogs(prev => [...prev, '[环境事件] 森林感染已触发']);
         continueAfterMutationRef.current = finishTurn;
-        showMutationPhaseNotice('火山感染阶段', 700);
+        showMutationPhaseNotice('森林感染阶段', 700);
         pulseMutationEvent();
 
-        if (countMutatedCards(latest.playerHand) >= MUTATION_LIMIT) {
+        if (countAllMutatedCards(latest.playerHand) >= MUTATION_LIMIT) {
           setLogs(prev => [...prev, '[环境事件] 我方异变牌已达上限，本次感染跳过']);
           finishMutationStage();
           return;
         }
 
-        const playerCandidates = getMutationCandidates(latest.playerHand);
+        const playerCandidates = getForestMutationCandidates(latest.playerHand);
         if (playerCandidates.length === 0) {
           setLogs(prev => [...prev, '[环境事件] 当前没有可感染的普通牌']);
           finishMutationStage();
@@ -1001,7 +1042,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [addAnimation, clearSettlementTimers, completedClashesSinceMutation, finishMutationStage, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, triggerDeckFeedback]);
+  }, [addAnimation, clearSettlementTimers, completedClashCount, completedClashesSinceMutation, finishMutationStage, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -1317,8 +1358,8 @@ export default function App() {
   };
 
   const isPlayerTurnState = (state.phase === 'PLAYER_ATTACK' || state.phase === 'PLAYER_DEFEND') && !isProcessing;
-  const playerMutationCount = countMutatedCards(state.playerHand);
-  const aiMutationCount = countMutatedCards(state.aiHand);
+  const playerMutationCount = countAllMutatedCards(state.playerHand);
+  const aiMutationCount = countAllMutatedCards(state.aiHand);
   const selectedVolcanoCards = state.playerHand.filter(card =>
     selectedCards.includes(card.id) && card.mutationType === 'VOLCANO'
   );
@@ -1375,9 +1416,9 @@ export default function App() {
     let bounce = false;
 
     if (mutationPhaseNotice) {
-      titleEng = 'Volcano Mutation';
+      titleEng = ACTIVE_ENVIRONMENT_CONFIG.name;
       titleChn = mutationPhaseNotice;
-      type = 'amber';
+      type = 'green';
       pulse = true;
     }
     else if (state.drawPile.length === 0 && showDepletedNotification) {
@@ -1869,22 +1910,22 @@ export default function App() {
             </motion.div>
           ) : (
             <div key="battle" className="flex flex-col gap-6 items-center relative">
-              <div className={`volcano-event-panel absolute -top-16 left-1/2 -translate-x-1/2 w-[250px] rounded-md border border-orange-500/25 bg-[#120d0a]/82 px-3 py-2 text-center font-mono shadow-[0_0_14px_rgba(249,115,22,0.10)] ${mutationEventPulse ? 'volcano-event-panel--pulse' : ''}`}>
-                <div className="flex items-center justify-center gap-1.5 text-[11px] font-black tracking-widest text-orange-200">
-                  <span className="text-[12px]" aria-hidden="true">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
-                  <span>{VOLCANO_ENVIRONMENT_CONFIG.name}</span>
+              <div className={`forest-event-panel absolute -top-16 left-1/2 -translate-x-1/2 w-[250px] rounded-md border border-emerald-500/25 bg-[#07120d]/82 px-3 py-2 text-center font-mono shadow-[0_0_14px_rgba(16,185,129,0.10)] ${mutationEventPulse ? 'forest-event-panel--pulse' : ''}`}>
+                <div className="flex items-center justify-center gap-1.5 text-[11px] font-black tracking-widest text-emerald-200">
+                  <span className="text-[12px]" aria-hidden="true">{ACTIVE_ENVIRONMENT_CONFIG.icon}</span>
+                  <span>{ACTIVE_ENVIRONMENT_CONFIG.name}</span>
                 </div>
-                <div className="text-[10px] font-semibold text-orange-100/70 mt-0.5">
+                <div className="text-[10px] font-semibold text-emerald-100/70 mt-0.5">
                   {mutationEventStatus}
                 </div>
               </div>
 
               {/* AI Battle Slot */}
               <div className="flex gap-4 min-h-[140px] items-center">
-                <div className={`absolute -right-32 top-8 min-w-[120px] text-[10px] font-mono font-bold text-orange-200/80 tracking-wider transition-transform duration-200 ${aiMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
-                  <div>🔥 对手手牌异变：{aiMutationCount} / {MUTATION_LIMIT}</div>
+                <div className={`absolute -right-32 top-8 min-w-[120px] text-[10px] font-mono font-bold text-emerald-200/80 tracking-wider transition-transform duration-200 ${aiMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
+                  <div>🌿 对手手牌异变：{aiMutationCount} / {MUTATION_LIMIT}</div>
                   {aiMutationCount >= MUTATION_LIMIT && (
-                    <div className="mt-0.5 text-[9px] text-orange-200/45">已达上限</div>
+                    <div className="mt-0.5 text-[9px] text-emerald-200/45">已达上限</div>
                   )}
                 </div>
                 {(state.aiRole === 'HOME' ? state.homePlayed : state.guestPlayed).length > 0 ? (
@@ -1986,14 +2027,28 @@ export default function App() {
                             </span>
                             <span className="font-extrabold text-white text-[11px]">
                               {item.homeMutationType === 'VOLCANO' && item.winner === 'HOME' ? '🔥 ' : ''}
-                              {item.homeType ? (item.homeMutationType === 'VOLCANO' ? volcanoCardLabel(item.homeType) : cardLabel(item.homeType)) : ''}
+                              {item.homeMutationType === 'FOREST' ? '🌿 ' : ''}
+                              {item.homeType
+                                ? (item.homeMutationType === 'VOLCANO'
+                                  ? volcanoCardLabel(item.homeType)
+                                  : item.homeMutationType === 'FOREST'
+                                    ? forestCardLabel(item.homeType)
+                                    : cardLabel(item.homeType))
+                                : ''}
                             </span>
                             <span className={`text-[12px] font-extrabold ${item.winner === 'HOME' ? 'text-amber-400' : item.winner === 'GUEST' ? 'text-sky-400' : 'text-zinc-500'}`}>
                               {item.winner === 'HOME' ? '▶' : item.winner === 'GUEST' ? '◀' : '＝'}
                             </span>
                             <span className="font-extrabold text-white text-[11px]">
                               {item.guestMutationType === 'VOLCANO' && item.winner === 'GUEST' ? '🔥 ' : ''}
-                              {item.guestType ? (item.guestMutationType === 'VOLCANO' ? volcanoCardLabel(item.guestType) : cardLabel(item.guestType)) : ''}
+                              {item.guestMutationType === 'FOREST' ? '🌿 ' : ''}
+                              {item.guestType
+                                ? (item.guestMutationType === 'VOLCANO'
+                                  ? volcanoCardLabel(item.guestType)
+                                  : item.guestMutationType === 'FOREST'
+                                    ? forestCardLabel(item.guestType)
+                                    : cardLabel(item.guestType))
+                                : ''}
                             </span>
                             <span className="opacity-50 text-[9px] leading-none">
                               {clashResult.playerRole === 'HOME' ? '对手' : '玩家'}
@@ -2283,10 +2338,10 @@ export default function App() {
 
         {/* CENTER COLUMN: ACTIVE HAND CARDS & CONTROL BUTTONS */}
         <div className="flex-1 flex flex-col items-center justify-center gap-5">
-          <div className={`text-[10px] font-mono font-bold text-orange-200/80 tracking-wider leading-tight text-center transition-transform duration-200 ${playerMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
-            <div>🔥 我方手牌异变：{playerMutationCount} / {MUTATION_LIMIT}</div>
+          <div className={`text-[10px] font-mono font-bold text-emerald-200/80 tracking-wider leading-tight text-center transition-transform duration-200 ${playerMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
+            <div>🌿 我方手牌异变：{playerMutationCount} / {MUTATION_LIMIT}</div>
             {playerMutationCount >= MUTATION_LIMIT && (
-              <div className="mt-0.5 text-[9px] text-orange-200/45">已达上限</div>
+              <div className="mt-0.5 text-[9px] text-emerald-200/45">已达上限</div>
             )}
           </div>
           <div className="flex gap-4 min-h-[120px] items-center">
@@ -2328,6 +2383,7 @@ export default function App() {
                       card w-[90px] h-[120px] rounded-xl bg-surface border transition-all flex flex-col items-center justify-center relative card-shadow
                       ${isShaking ? 'animate-shake-card' : ''}
                       ${card.mutationType === 'VOLCANO' ? `lava-card ${mutatedCardGlowIds[card.id] ? 'lava-card--fresh' : ''}` : ''}
+                      ${card.mutationType === 'FOREST' ? `forest-card ${mutatedCardGlowIds[card.id] ? 'forest-card--fresh' : ''}` : ''}
                       ${customInteractiveClass}
                       ${getCardBorderClass(card.type)}
                       ${isSelected ? 'border-accent -translate-y-4 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'border-border'}
@@ -2335,11 +2391,25 @@ export default function App() {
                   >
                     <CardIcon type={card.type} className="text-4xl mb-2" />
                     <div className="text-[10px] font-bold tracking-wider text-text-dim">
-                      {card.mutationType === 'VOLCANO' ? volcanoCardLabel(card.type) : cardLabel(card.type)}
+                      {card.mutationType === 'VOLCANO'
+                        ? volcanoCardLabel(card.type)
+                        : card.mutationType === 'FOREST'
+                          ? forestCardLabel(card.type)
+                          : cardLabel(card.type)}
                     </div>
+                    {card.mutationType === 'FOREST' && (
+                      <div className="mt-0.5 text-[9px] font-black tracking-widest text-emerald-200/85">
+                        {forestStageLabel(card)}
+                      </div>
+                    )}
                     {card.mutationType === 'VOLCANO' && (
                       <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(251,146,60,0.55)]" aria-hidden="true">
                         🔥
+                      </div>
+                    )}
+                    {card.mutationType === 'FOREST' && (
+                      <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(52,211,153,0.55)]" aria-hidden="true">
+                        {forestIcon(card)}
                       </div>
                     )}
                   </motion.div>
@@ -2503,7 +2573,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Volcano mutation selection */}
+      {/* Forest mutation selection */}
       <AnimatePresence>
         {mutationCandidates.length > 0 && (
           <div className="absolute inset-0 flex items-center justify-center z-[140] pointer-events-none">
@@ -2512,27 +2582,27 @@ export default function App() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.96, opacity: 0, y: 6 }}
               transition={{ duration: 0.18 }}
-              className="w-[420px] rounded-xl border border-orange-500/35 bg-[#100c0a]/92 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(249,115,22,0.12)] backdrop-blur-md font-mono text-center pointer-events-auto"
+              className="w-[420px] rounded-xl border border-emerald-500/35 bg-[#07120d]/92 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(16,185,129,0.12)] backdrop-blur-md font-mono text-center pointer-events-auto"
             >
-              <h3 className="text-orange-200 text-sm font-black tracking-widest">火山感染</h3>
-              <p className="mt-1 text-[11px] text-orange-100/75 font-semibold">请选择 1 张手牌进行异变</p>
+              <h3 className="text-emerald-200 text-sm font-black tracking-widest">森林感染</h3>
+              <p className="mt-1 text-[11px] text-emerald-100/75 font-semibold">请选择 1 张手牌感染为森林幼苗</p>
               <div className="mt-5 flex items-center justify-center gap-4">
                 {mutationCandidates.map(card => (
                   <button
                     key={card.id}
                     onClick={() => handleMutationPick(card.id)}
-                    title={`感染后获得火山属性\n当前版本暂未开放额外伤害`}
-                    className={`group w-[126px] h-[154px] rounded-xl bg-surface border border-orange-500/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-orange-300 hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
+                    title="感染后成为森林幼苗"
+                    className={`group w-[126px] h-[154px] rounded-xl bg-surface border border-emerald-500/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-emerald-300 hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
                   >
-                    <div className="absolute top-2 right-2 text-[14px] drop-shadow-[0_0_6px_rgba(251,146,60,0.45)]" aria-hidden="true">🔥</div>
+                    <div className="absolute top-2 right-2 text-[14px] drop-shadow-[0_0_6px_rgba(52,211,153,0.45)]" aria-hidden="true">🌱</div>
                     <CardIcon type={card.type} className="text-4xl mb-2" />
                     <div className="text-[10px] font-bold tracking-wider text-text-dim leading-relaxed">
                       <div>普通{plainCardLabel(card.type)}</div>
-                      <div className="text-orange-200/90">→ {volcanoCardLabel(card.type)}</div>
+                      <div className="text-emerald-200/90">→ {forestCardLabel(card.type)}·幼苗</div>
                     </div>
-                    <div className="absolute -bottom-11 left-1/2 hidden w-[160px] -translate-x-1/2 rounded-md border border-orange-500/25 bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed text-orange-100/75 shadow-xl group-hover:block">
-                      <div>感染后获得火山属性</div>
-                      <div className="text-orange-100/45">当前版本暂未开放额外伤害</div>
+                    <div className="absolute -bottom-11 left-1/2 hidden w-[160px] -translate-x-1/2 rounded-md border border-emerald-500/25 bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed text-emerald-100/75 shadow-xl group-hover:block">
+                      <div>感染后成为森林幼苗</div>
+                      <div className="text-emerald-100/45">保留原猜拳属性</div>
                     </div>
                   </button>
                 ))}
@@ -2696,9 +2766,9 @@ export default function App() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.62, ease: 'easeInOut' }}
               >
-                <span className="absolute text-[15px] drop-shadow-[0_0_8px_rgba(251,146,60,0.8)]">🔥</span>
-                <span className="absolute -left-5 top-4 text-[10px] opacity-75 drop-shadow-[0_0_6px_rgba(251,146,60,0.65)]">🔥</span>
-                <span className="absolute left-5 top-7 text-[9px] opacity-60 drop-shadow-[0_0_6px_rgba(251,146,60,0.65)]">🔥</span>
+                <span className="absolute text-[15px] drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]">🌱</span>
+                <span className="absolute -left-5 top-4 text-[10px] opacity-75 drop-shadow-[0_0_6px_rgba(52,211,153,0.65)]">🌿</span>
+                <span className="absolute left-5 top-7 text-[9px] opacity-60 drop-shadow-[0_0_6px_rgba(52,211,153,0.65)]">🌱</span>
               </motion.div>
             );
           })()}
@@ -2710,9 +2780,9 @@ export default function App() {
               animate={{ opacity: [0, 0.55, 0.25, 0], scale: [0.96, 1.02, 1] }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.62, ease: 'easeOut' }}
-              className="absolute left-1/2 top-[86px] -translate-x-1/2 w-[260px] h-[86px] rounded-full border border-orange-500/20 bg-orange-500/[0.08] shadow-[0_0_30px_rgba(249,115,22,0.22)] flex items-center justify-center font-mono text-[11px] font-black text-orange-200/85 tracking-wider"
+              className="absolute left-1/2 top-[86px] -translate-x-1/2 w-[260px] h-[86px] rounded-full border border-emerald-500/20 bg-emerald-500/[0.08] shadow-[0_0_30px_rgba(16,185,129,0.22)] flex items-center justify-center font-mono text-[11px] font-black text-emerald-200/85 tracking-wider"
             >
-              对手获得 1 张火山异变牌
+              对手获得 1 张森林异变牌
             </motion.div>
           )}
         </AnimatePresence>
@@ -2798,6 +2868,14 @@ export default function App() {
           animation: volcano-event-pulse 0.78s ease-in-out;
         }
 
+        .forest-event-panel {
+          animation: forest-breathe 3.8s ease-in-out infinite;
+        }
+
+        .forest-event-panel--pulse {
+          animation: forest-event-pulse 0.78s ease-in-out;
+        }
+
         .lava-card {
           border-color: rgba(249, 115, 22, 0.55) !important;
           box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.16), 0 0 13px rgba(249, 115, 22, 0.12);
@@ -2822,6 +2900,16 @@ export default function App() {
           animation: lava-card-arrive 0.9s ease-out, lava-card-breathe 4.2s ease-in-out infinite 0.9s;
         }
 
+        .forest-card {
+          border-color: rgba(16, 185, 129, 0.55) !important;
+          box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.15), 0 0 12px rgba(16, 185, 129, 0.11);
+          overflow: hidden;
+        }
+
+        .forest-card--fresh {
+          animation: forest-card-arrive 0.9s ease-out;
+        }
+
         @keyframes volcano-breathe {
           0%, 100% { box-shadow: 0 0 12px rgba(249, 115, 22, 0.08); }
           50% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.18); }
@@ -2830,6 +2918,17 @@ export default function App() {
         @keyframes volcano-event-pulse {
           0%, 100% { transform: translateX(-50%) scale(1); }
           38% { transform: translateX(-50%) scale(1.035); box-shadow: 0 0 26px rgba(249, 115, 22, 0.28); }
+          64% { transform: translateX(-50%) scale(0.99); }
+        }
+
+        @keyframes forest-breathe {
+          0%, 100% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.08); }
+          50% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.18); }
+        }
+
+        @keyframes forest-event-pulse {
+          0%, 100% { transform: translateX(-50%) scale(1); }
+          38% { transform: translateX(-50%) scale(1.035); box-shadow: 0 0 26px rgba(16, 185, 129, 0.28); }
           64% { transform: translateX(-50%) scale(0.99); }
         }
 
@@ -2842,6 +2941,12 @@ export default function App() {
           0% { box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.18), 0 0 8px rgba(249, 115, 22, 0.10); }
           42% { box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.58), 0 0 30px rgba(249, 115, 22, 0.36); }
           100% { box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.18), 0 0 13px rgba(249, 115, 22, 0.12); }
+        }
+
+        @keyframes forest-card-arrive {
+          0% { box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.14), 0 0 8px rgba(16, 185, 129, 0.10); }
+          42% { box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.58), 0 0 26px rgba(16, 185, 129, 0.30); }
+          100% { box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.15), 0 0 12px rgba(16, 185, 129, 0.11); }
         }
       `}</style>
     </div>
@@ -2870,13 +2975,29 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
     <motion.div 
       initial={{ scale: 0.8, opacity: 0, y: 10 }}
       animate={{ scale: 1, opacity: 1, y: 0 }}
-      className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl ${getCardBorderClass(card.type)} ${card.mutationType === 'VOLCANO' ? 'lava-card' : ''}`}
+      className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl ${getCardBorderClass(card.type)} ${card.mutationType === 'VOLCANO' ? 'lava-card' : ''} ${card.mutationType === 'FOREST' ? 'forest-card' : ''}`}
     >
       <CardIcon type={card.type} className="text-3xl mb-1" />
-      <span className="text-[9px] font-black tracking-widest opacity-40">{card.mutationType === 'VOLCANO' ? volcanoCardLabel(card.type) : cardLabel(card.type)}</span>
+      <span className="text-[9px] font-black tracking-widest opacity-40">
+        {card.mutationType === 'VOLCANO'
+          ? volcanoCardLabel(card.type)
+          : card.mutationType === 'FOREST'
+            ? forestCardLabel(card.type)
+            : cardLabel(card.type)}
+      </span>
+      {card.mutationType === 'FOREST' && (
+        <span className="mt-0.5 text-[8px] font-black tracking-widest text-emerald-200/80">
+          {forestStageLabel(card)}
+        </span>
+      )}
       {card.mutationType === 'VOLCANO' && (
         <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(251,146,60,0.55)]" aria-hidden="true">
           🔥
+        </div>
+      )}
+      {card.mutationType === 'FOREST' && (
+        <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(52,211,153,0.55)]" aria-hidden="true">
+          {forestIcon(card)}
         </div>
       )}
     </motion.div>

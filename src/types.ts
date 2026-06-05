@@ -1,10 +1,13 @@
 export type CardType = 'ROCK' | 'PAPER' | 'SCISSORS';
-export type MutationType = 'VOLCANO';
+export type MutationType = 'VOLCANO' | 'FOREST';
+export type ForestGrowthStage = 'SEEDLING' | 'MATURE';
 
 export interface Card {
   id: string;
   type: CardType;
   mutationType?: MutationType;
+  forestGrowthStage?: ForestGrowthStage;
+  forestMatureAfterClash?: number;
 }
 
 export type PlayerRole = 'HOME' | 'GUEST';

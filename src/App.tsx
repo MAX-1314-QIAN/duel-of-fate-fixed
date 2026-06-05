@@ -2629,7 +2629,10 @@ export default function App() {
               const isForestRecoveryLog = log.includes('[森林恢复]') || (log.includes('[恢复]') && log.includes('森林'));
               const isHpRecoveryLog = log.includes('[恢复]') && log.includes('HP');
               const isSymbiosisLog = log.includes('[羁绊]') && log.includes('共生绽放');
-              const isGlacierLog = log.includes('冰川') || log.includes('[冰川回收]');
+              const isGlacierInfectionLog = (isEnvironment && log.includes('冰川感染')) || (log.includes('[玩家]') && log.includes('冰川'));
+              const isGlacierRecycleLog = log.includes('[冰川回收]');
+              const isGlacierEchoLog = log.includes('极寒回响');
+              const isGlacierNormalReturnLog = isGlacierRecycleLog && (log.includes('恢复为普通牌') || log.includes('已使用过') || log.includes('返回手牌并恢复'));
               const isAiMutation = isEnvironment && log.includes('对手获得');
               const isMutationLimit = isEnvironment && log.includes('上限');
               const isMutationClosed = isEnvironment && log.includes('耗尽');
@@ -2643,7 +2646,10 @@ export default function App() {
               else if (isHpRecoveryLog) textColor = 'text-emerald-200/90';
               else if (isForestGrowthLog) textColor = 'text-emerald-400/90';
               else if (isForestMutation) textColor = 'text-lime-300/85';
-              else if (isGlacierLog) textColor = 'text-cyan-200/90';
+              else if (isGlacierEchoLog) textColor = 'text-sky-100 font-semibold';
+              else if (isGlacierNormalReturnLog) textColor = 'text-slate-300/80';
+              else if (isGlacierRecycleLog) textColor = 'text-cyan-200/90';
+              else if (isGlacierInfectionLog) textColor = 'text-sky-200/85';
               else if (isBondLog) textColor = 'text-orange-300';
               else if (isBurnLog) textColor = 'text-orange-500/90';
               else if (isVolcanoDamage) textColor = 'text-orange-500/90';
@@ -2797,7 +2803,7 @@ export default function App() {
                       ${isShaking ? 'animate-shake-card' : ''}
                       ${card.mutationType === 'VOLCANO' ? `lava-card ${mutatedCardGlowIds[card.id] ? 'lava-card--fresh' : ''}` : ''}
                       ${card.mutationType === 'FOREST' ? `forest-card forest-card--${card.forestGrowthStage === 'MATURE' ? 'mature' : 'seedling'} ${mutatedCardGlowIds[card.id] ? 'forest-card--fresh' : ''} ${maturedCardGlowIds[card.id] ? 'forest-card--growing' : ''}` : ''}
-                      ${card.mutationType === 'GLACIER' ? `glacier-card ${mutatedCardGlowIds[card.id] ? 'glacier-card--fresh' : ''}` : ''}
+                      ${card.mutationType === 'GLACIER' ? `glacier-card ${card.glacierEchoUsed ? 'glacier-card--echo-used' : ''} ${mutatedCardGlowIds[card.id] ? 'glacier-card--fresh' : ''}` : ''}
                       ${customInteractiveClass}
                       ${getCardBorderClass(card.type)}
                       ${isSelected ? 'border-accent -translate-y-4 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'border-border'}
@@ -2838,6 +2844,11 @@ export default function App() {
                         ❄️
                       </div>
                     )}
+                    {card.mutationType === 'GLACIER' && card.glacierEchoUsed && (
+                      <div className="absolute bottom-1.5 right-1.5 rounded border border-cyan-200/30 bg-[#06121a]/85 px-1.5 py-0.5 text-[7px] font-black tracking-wider text-cyan-50/80 shadow-[0_0_8px_rgba(125,211,252,0.15)] pointer-events-none">
+                        ❄️ 1 / 1
+                      </div>
+                    )}
                   </motion.div>
                 );
               })
@@ -2859,7 +2870,7 @@ export default function App() {
               </div>
             )}
             {showGlacierEchoPreview && (
-              <div className={`absolute ${showResonancePreview || showSymbiosisPreview ? 'bottom-[132px]' : 'bottom-[84px]'} left-1/2 -translate-x-1/2 w-[280px] max-h-[48px] rounded-md border border-cyan-300/30 bg-[#06121a]/90 px-3 py-1.5 text-center font-mono shadow-[0_0_14px_rgba(34,211,238,0.12)] pointer-events-none`}>
+              <div className={`glacier-echo-preview absolute ${showResonancePreview || showSymbiosisPreview ? 'bottom-[132px]' : 'bottom-[84px]'} left-1/2 -translate-x-1/2 w-[280px] max-h-[48px] rounded-md border border-cyan-300/30 bg-[#06121a]/90 px-3 py-1.5 text-center font-mono shadow-[0_0_14px_rgba(34,211,238,0.12)] pointer-events-none`}>
                 <div className="text-[9.5px] font-black tracking-widest text-cyan-100 leading-tight">❄️ 极寒回响待触发</div>
                 <div className="mt-0.5 text-[8px] font-semibold text-cyan-50/65 leading-tight">至少 1 张冰川牌形成平局时，可保留 1 张异变牌</div>
               </div>
@@ -3042,22 +3053,28 @@ export default function App() {
             animate={{ opacity: [0, 1, 1, 0], y: [8, 0, -2, -6], scale: [0.96, 1, 1, 0.98] }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.85, ease: 'easeOut' }}
-            className="absolute left-1/2 top-[286px] z-[118] -translate-x-1/2 rounded-lg border border-cyan-300/35 bg-[#06121a]/92 px-4 py-2 text-center font-mono shadow-[0_0_24px_rgba(34,211,238,0.16)] pointer-events-none"
+            className="glacier-recycle-burst absolute left-1/2 top-[286px] z-[118] -translate-x-1/2 rounded-lg border border-cyan-300/35 bg-[#06121a]/92 px-4 py-2 text-center font-mono shadow-[0_0_24px_rgba(34,211,238,0.16)] pointer-events-none"
           >
+            <div className="glacier-recycle-path" aria-hidden="true" />
             {glacierRecycleFeedback.echoByTarget?.AI ? (
               <>
-                <div className="text-[12px] font-black tracking-widest text-cyan-100">❄️ 对手触发极寒回响</div>
-                <div className="mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手牌</div>
+                <div className="relative z-10 text-[12px] font-black tracking-widest text-cyan-50">❄️ 对手触发极寒回响</div>
+                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">1 张冰川牌保留异变属性</div>
               </>
             ) : glacierRecycleFeedback.echoByTarget?.PLAYER ? (
               <>
-                <div className="text-[12px] font-black tracking-widest text-cyan-100">❄️ 极寒回响</div>
-                <div className="mt-1 text-[10px] font-bold text-cyan-50/72">选择 1 张冰川牌保留异变</div>
+                <div className="relative z-10 text-[12px] font-black tracking-widest text-cyan-50">❄️ 极寒回响</div>
+                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">1 张冰川牌保留异变属性</div>
+              </>
+            ) : glacierRecycleFeedback.targets.includes('AI') && !glacierRecycleFeedback.targets.includes('PLAYER') ? (
+              <>
+                <div className="relative z-10 text-[12px] font-black tracking-widest text-cyan-100">❄️ 对手回收 1 张冰川牌</div>
+                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手牌</div>
               </>
             ) : (
               <>
-                <div className="text-[12px] font-black tracking-widest text-cyan-100">❄️ 冰封回收</div>
-                <div className="mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手牌</div>
+                <div className="relative z-10 text-[12px] font-black tracking-widest text-cyan-100">❄️ 冰封回收</div>
+                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手牌</div>
               </>
             )}
           </motion.div>
@@ -3072,7 +3089,7 @@ export default function App() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.96, opacity: 0, y: 6 }}
               transition={{ duration: 0.18 }}
-              className="w-[420px] rounded-xl border border-cyan-300/35 bg-[#06121a]/94 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(34,211,238,0.14)] backdrop-blur-md font-mono text-center pointer-events-auto"
+              className="glacier-echo-modal relative overflow-hidden w-[420px] rounded-xl border border-cyan-300/35 bg-[#06121a]/94 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(34,211,238,0.14)] backdrop-blur-md font-mono text-center pointer-events-auto"
             >
               <h3 className="text-cyan-100 text-sm font-black tracking-widest">❄️ 极寒回响</h3>
               <p className="mt-1 text-[11px] text-cyan-50/75 font-semibold">请选择 1 张冰川牌保留异变属性</p>
@@ -3081,8 +3098,8 @@ export default function App() {
                   <button
                     key={card.id}
                     onClick={() => handleGlacierEchoPick(card.id)}
-                    title={`返回手牌后仍保留冰川属性\n每张冰川牌仅可保留 1 次`}
-                    className={`group w-[126px] h-[154px] rounded-xl bg-surface border border-cyan-300/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-cyan-200 hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
+                    title={`返回手牌后仍保留冰川属性\n每张冰川牌最多保留 1 次`}
+                    className={`glacier-echo-candidate group w-[126px] h-[154px] rounded-xl bg-surface border border-cyan-300/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-cyan-200 hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
                   >
                     <div className="absolute top-2 right-2 text-[14px] drop-shadow-[0_0_6px_rgba(125,211,252,0.45)]" aria-hidden="true">❄️</div>
                     <CardIcon type={card.type} className="text-4xl mb-2" />
@@ -3092,7 +3109,7 @@ export default function App() {
                     </div>
                     <div className="absolute -bottom-16 left-1/2 hidden w-[176px] -translate-x-1/2 rounded-md border border-cyan-300/25 bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed text-cyan-50/75 shadow-xl group-hover:block">
                       <div>返回手牌后仍保留冰川属性</div>
-                      <div className="text-cyan-50/55">每张冰川牌仅可保留 1 次</div>
+                      <div className="text-cyan-50/55">每张冰川牌最多保留 1 次</div>
                     </div>
                   </button>
                 ))}
@@ -3125,7 +3142,7 @@ export default function App() {
                     key={card.id}
                     onClick={() => handleMutationPick(card.id)}
                     title={isGlacierEnvironment
-                      ? `感染后：\n❄️ ${glacierCardLabel(card.type)}\n\n平局后返回手牌并恢复为普通牌`
+                      ? `感染后：\n❄️ ${glacierCardLabel(card.type)}\n\n与敌方卡牌平局时：\n返回手牌并恢复为普通牌`
                       : `感染后：\n🌱 ${forestCardLabel(card.type)}·幼苗\n\n完整保留 1 次交锋后成熟\n成熟后命中可恢复 HP`
                     }
                     className={`group w-[126px] h-[154px] rounded-xl bg-surface border ${isGlacierEnvironment ? 'border-cyan-300/30 hover:border-cyan-200' : 'border-emerald-500/30 hover:border-emerald-300'} flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
@@ -3145,8 +3162,8 @@ export default function App() {
                       <div>{isGlacierEnvironment ? '❄️' : '🌱'} {isGlacierEnvironment ? glacierCardLabel(card.type) : `${forestCardLabel(card.type)}·幼苗`}</div>
                       {isGlacierEnvironment ? (
                         <>
-                          <div className="mt-1 text-cyan-50/55">平局后返回手牌</div>
-                          <div className="text-cyan-50/55">并恢复为普通牌</div>
+                          <div className="mt-1 text-cyan-50/55">与敌方卡牌平局时：</div>
+                          <div className="text-cyan-50/55">返回手牌并恢复为普通牌</div>
                         </>
                       ) : (
                         <>
@@ -3500,6 +3517,18 @@ export default function App() {
             linear-gradient(35deg, transparent 0 70%, rgba(34, 211, 238, 0.13) 70.5% 71.5%, transparent 72% 100%);
         }
 
+        .glacier-event-panel::after {
+          content: "";
+          position: absolute;
+          inset: 2px;
+          border-radius: 5px;
+          pointer-events: none;
+          opacity: 0.34;
+          background:
+            linear-gradient(90deg, rgba(186, 230, 253, 0.18), transparent 18%, transparent 82%, rgba(125, 211, 252, 0.16)),
+            linear-gradient(0deg, rgba(186, 230, 253, 0.13), transparent 22%, transparent 78%, rgba(125, 211, 252, 0.12));
+        }
+
         .glacier-event-panel--pulse {
           animation: glacier-event-pulse 0.78s ease-in-out;
         }
@@ -3601,6 +3630,7 @@ export default function App() {
         .glacier-card {
           border-color: rgba(125, 211, 252, 0.56) !important;
           box-shadow: inset 0 0 0 1px rgba(186, 230, 253, 0.14), 0 0 12px rgba(34, 211, 238, 0.10);
+          animation: glacier-card-breathe 5.4s ease-in-out infinite;
           overflow: hidden;
         }
 
@@ -3608,12 +3638,16 @@ export default function App() {
           border-color: rgb(245, 158, 11) !important;
         }
 
-        .glacier-card::before {
+        .glacier-card::before,
+        .glacier-card::after {
           content: "";
           position: absolute;
           inset: 6px;
           border-radius: 9px;
           pointer-events: none;
+        }
+
+        .glacier-card::before {
           opacity: 0.40;
           background:
             linear-gradient(120deg, transparent 0 30%, rgba(186, 230, 253, 0.28) 30.5% 31.5%, transparent 32% 100%),
@@ -3621,8 +3655,79 @@ export default function App() {
             radial-gradient(circle at 82% 22%, rgba(224, 242, 254, 0.36) 0 1px, transparent 2px);
         }
 
+        .glacier-card::after {
+          opacity: 0.32;
+          background:
+            radial-gradient(circle at 9% 16%, rgba(224, 242, 254, 0.45) 0 1px, transparent 2px),
+            radial-gradient(circle at 14% 86%, rgba(186, 230, 253, 0.30) 0 1px, transparent 2px),
+            radial-gradient(circle at 88% 18%, rgba(224, 242, 254, 0.38) 0 1px, transparent 2px),
+            radial-gradient(circle at 84% 82%, rgba(125, 211, 252, 0.28) 0 1px, transparent 2px),
+            linear-gradient(90deg, rgba(186, 230, 253, 0.22), transparent 20%, transparent 80%, rgba(125, 211, 252, 0.20)),
+            linear-gradient(0deg, rgba(186, 230, 253, 0.17), transparent 20%, transparent 80%, rgba(125, 211, 252, 0.14));
+        }
+
+        .glacier-card--echo-used {
+          box-shadow: inset 0 0 0 1px rgba(224, 242, 254, 0.22), 0 0 14px rgba(14, 165, 233, 0.13);
+        }
+
         .glacier-card--fresh {
-          animation: glacier-card-arrive 0.82s ease-out;
+          animation: glacier-card-arrive 0.82s ease-out, glacier-card-breathe 5.4s ease-in-out infinite 0.82s;
+        }
+
+        .glacier-echo-preview {
+          overflow: hidden;
+        }
+
+        .glacier-echo-preview::before,
+        .glacier-echo-modal::before,
+        .glacier-echo-candidate::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          opacity: 0.22;
+          background:
+            linear-gradient(115deg, transparent 0 26%, rgba(186, 230, 253, 0.20) 26.5% 27.5%, transparent 28% 100%),
+            radial-gradient(circle at 15% 22%, rgba(224, 242, 254, 0.24) 0 1px, transparent 2px),
+            radial-gradient(circle at 84% 72%, rgba(125, 211, 252, 0.18) 0 1px, transparent 2px);
+        }
+
+        .glacier-echo-candidate {
+          overflow: hidden;
+        }
+
+        .glacier-echo-candidate:hover {
+          box-shadow: inset 0 0 0 1px rgba(224, 242, 254, 0.24), 0 0 18px rgba(34, 211, 238, 0.18);
+        }
+
+        .glacier-recycle-burst {
+          overflow: hidden;
+        }
+
+        .glacier-recycle-burst::before,
+        .glacier-recycle-burst::after {
+          content: "✦";
+          position: absolute;
+          top: 15px;
+          color: rgba(224, 242, 254, 0.70);
+          font-size: 15px;
+          filter: drop-shadow(0 0 7px rgba(125, 211, 252, 0.55));
+          animation: glacier-shard-flow 0.82s ease-out;
+        }
+
+        .glacier-recycle-burst::before { left: 18px; }
+        .glacier-recycle-burst::after { right: 18px; animation-direction: reverse; }
+
+        .glacier-recycle-path {
+          position: absolute;
+          left: 18px;
+          right: 18px;
+          top: 18px;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(186, 230, 253, 0.68), transparent);
+          box-shadow: 0 0 12px rgba(34, 211, 238, 0.28);
+          animation: glacier-path-return 0.82s ease-out;
         }
 
         .forest-symbiosis-burst {
@@ -3709,6 +3814,18 @@ export default function App() {
           100% { transform: translateX(72px) scale(1); opacity: 0; }
         }
 
+        @keyframes glacier-shard-flow {
+          0% { transform: translateX(-18px) scale(0.65) rotate(0deg); opacity: 0; }
+          34% { opacity: 1; }
+          100% { transform: translateX(58px) scale(1) rotate(26deg); opacity: 0; }
+        }
+
+        @keyframes glacier-path-return {
+          0% { transform: scaleX(0.1); opacity: 0; }
+          32% { transform: scaleX(1); opacity: 1; }
+          100% { transform: scaleX(0.88); opacity: 0; }
+        }
+
         @keyframes lava-card-breathe {
           0%, 100% { box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.14), 0 0 11px rgba(249, 115, 22, 0.10); }
           50% { box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.25), 0 0 17px rgba(249, 115, 22, 0.18); }
@@ -3724,6 +3841,11 @@ export default function App() {
           0% { box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.14), 0 0 8px rgba(16, 185, 129, 0.10); }
           42% { box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.58), 0 0 26px rgba(16, 185, 129, 0.30); }
           100% { box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.15), 0 0 12px rgba(16, 185, 129, 0.11); }
+        }
+
+        @keyframes glacier-card-breathe {
+          0%, 100% { box-shadow: inset 0 0 0 1px rgba(186, 230, 253, 0.14), 0 0 11px rgba(34, 211, 238, 0.09); }
+          50% { box-shadow: inset 0 0 0 1px rgba(224, 242, 254, 0.24), 0 0 17px rgba(34, 211, 238, 0.16); }
         }
 
         @keyframes glacier-card-arrive {
@@ -3758,7 +3880,7 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
     <motion.div 
       initial={{ scale: 0.8, opacity: 0, y: 10 }}
       animate={{ scale: 1, opacity: 1, y: 0 }}
-      className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl ${getCardBorderClass(card.type)} ${card.mutationType === 'VOLCANO' ? 'lava-card' : ''} ${card.mutationType === 'FOREST' ? `forest-card forest-card--${card.forestGrowthStage === 'MATURE' ? 'mature' : 'seedling'}` : ''} ${card.mutationType === 'GLACIER' ? 'glacier-card' : ''}`}
+      className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl ${getCardBorderClass(card.type)} ${card.mutationType === 'VOLCANO' ? 'lava-card' : ''} ${card.mutationType === 'FOREST' ? `forest-card forest-card--${card.forestGrowthStage === 'MATURE' ? 'mature' : 'seedling'}` : ''} ${card.mutationType === 'GLACIER' ? `glacier-card ${card.glacierEchoUsed ? 'glacier-card--echo-used' : ''}` : ''}`}
     >
       <CardIcon type={card.type} className="relative z-10 text-3xl mb-1" />
       <span className="text-[9px] font-black tracking-widest opacity-40">
@@ -3788,6 +3910,11 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
       {card.mutationType === 'GLACIER' && (
         <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(125,211,252,0.55)]" aria-hidden="true">
           ❄️
+        </div>
+      )}
+      {card.mutationType === 'GLACIER' && card.glacierEchoUsed && (
+        <div className="absolute bottom-1.5 right-1.5 rounded border border-cyan-200/30 bg-[#06121a]/85 px-1.5 py-0.5 text-[7px] font-black tracking-wider text-cyan-50/80 shadow-[0_0_8px_rgba(125,211,252,0.15)] pointer-events-none">
+          ❄️ 1 / 1
         </div>
       )}
     </motion.div>

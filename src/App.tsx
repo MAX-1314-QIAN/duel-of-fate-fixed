@@ -11,6 +11,7 @@ import {
   VOLCANO_ENVIRONMENT_CONFIG,
   advanceForestGrowth,
   applyMutationToCard,
+  calculateForestRecovery,
   calculateVolcanoDamage,
   canTriggerMutation,
   countAllMutatedCards,
@@ -50,6 +51,8 @@ const forestStageLabel = (card: Card) =>
   card.forestGrowthStage === 'MATURE' ? '成熟' : '幼苗';
 const forestIcon = (card: Card) =>
   card.forestGrowthStage === 'MATURE' ? '🌿' : '🌱';
+const isMatureForestCard = (card: Card) =>
+  card.mutationType === 'FOREST' && card.forestGrowthStage === 'MATURE';
 const battleCardLabel = (card: Card) =>
   card.mutationType === 'VOLCANO'
     ? volcanoCardLabel(card.type)
@@ -159,6 +162,12 @@ export default function App() {
   const [aiMutationCountPulse, setAiMutationCountPulse] = useState(false);
   const [resonanceAnimation, setResonanceAnimation] = useState<{ source: 'PLAYER' | 'AI'; target: 'PLAYER' | 'AI'; token: number } | null>(null);
   const [burnFeedback, setBurnFeedback] = useState<{ targets: Array<'PLAYER' | 'AI'>; token: number } | null>(null);
+  const [forestRecoveryFeedback, setForestRecoveryFeedback] = useState<{
+    targets: Array<'PLAYER' | 'AI'>;
+    recoveryByTarget: Partial<Record<'PLAYER' | 'AI', number>>;
+    symbiosisByTarget: Partial<Record<'PLAYER' | 'AI', boolean>>;
+    token: number;
+  } | null>(null);
   
   // Custom feedback states
   const [playerDiscardPrompt, setPlayerDiscardPrompt] = useState<string | null>(null);
@@ -404,6 +413,7 @@ export default function App() {
     setAiMutationCountPulse(false);
     setResonanceAnimation(null);
     setBurnFeedback(null);
+    setForestRecoveryFeedback(null);
     continueAfterMutationRef.current = null;
     setPlayerDiscardPrompt(null);
     setAiDiscardPrompt(null);
@@ -642,8 +652,51 @@ export default function App() {
     const aiVolcanoDamage = aiRoleAtClash === 'HOME' ? volcanoDamageToHome : volcanoDamageToGuest;
     const playerResonanceDamage = playerRoleAtClash === 'HOME' ? resonanceDamageToHome : resonanceDamageToGuest;
     const aiResonanceDamage = aiRoleAtClash === 'HOME' ? resonanceDamageToHome : resonanceDamageToGuest;
-    const resolvedPlayerHP = Math.max(0, clashSnapshot.playerHP - playerDamage);
-    const resolvedAiHP = Math.max(0, clashSnapshot.aiHP - aiDamage);
+    const homeInitialHP = playerRoleAtClash === 'HOME' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
+    const guestInitialHP = playerRoleAtClash === 'GUEST' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
+    const homeHpAfterDamage = Math.max(0, homeInitialHP - hDamage);
+    const guestHpAfterDamage = Math.max(0, guestInitialHP - gDamage);
+    const homeMatureForestHits = finalHomeAttack.filter(isMatureForestCard).length;
+    const guestMatureForestHits = guestDamagingCards.filter(isMatureForestCard).length;
+    const homePlayedMatureForestCards = hCards.filter(isMatureForestCard).length;
+    const guestPlayedMatureForestCards = gCards.filter(isMatureForestCard).length;
+    const homeCanTriggerSymbiosis = homePlayedMatureForestCards >= 2 && homeMatureForestHits >= 1;
+    const guestCanTriggerSymbiosis = guestPlayedMatureForestCards >= 2 && guestMatureForestHits >= 1;
+    const symbiosisOwner: 'HOME' | 'GUEST' | null = homeCanTriggerSymbiosis
+      ? 'HOME'
+      : guestCanTriggerSymbiosis
+        ? 'GUEST'
+        : null;
+    const homeForestRecovery = calculateForestRecovery({
+      successfulMatureForestHits: homeMatureForestHits,
+      playedMatureForestCards: symbiosisOwner === 'HOME'
+        ? homePlayedMatureForestCards
+        : Math.min(homePlayedMatureForestCards, 1),
+      currentHp: homeHpAfterDamage,
+      maxHp: INITIAL_HP,
+    });
+    const guestForestRecovery = calculateForestRecovery({
+      successfulMatureForestHits: guestMatureForestHits,
+      playedMatureForestCards: symbiosisOwner === 'GUEST'
+        ? guestPlayedMatureForestCards
+        : Math.min(guestPlayedMatureForestCards, 1),
+      currentHp: guestHpAfterDamage,
+      maxHp: INITIAL_HP,
+    });
+    const playerForestRecovery = playerRoleAtClash === 'HOME'
+      ? homeForestRecovery.finalRecovery
+      : guestForestRecovery.finalRecovery;
+    const aiForestRecovery = aiRoleAtClash === 'HOME'
+      ? homeForestRecovery.finalRecovery
+      : guestForestRecovery.finalRecovery;
+    const playerHpAfterDamage = Math.max(0, clashSnapshot.playerHP - playerDamage);
+    const aiHpAfterDamage = Math.max(0, clashSnapshot.aiHP - aiDamage);
+    const resolvedPlayerHP = Math.min(INITIAL_HP, playerHpAfterDamage + playerForestRecovery);
+    const resolvedAiHP = Math.min(INITIAL_HP, aiHpAfterDamage + aiForestRecovery);
+    const forestMutationCountdownReduction =
+      homeForestRecovery.symbiosisTriggered || guestForestRecovery.symbiosisTriggered
+        ? 1
+        : 0;
 
     const appendDamageBreakdownLogs = (
       baseDamage: number,
@@ -686,6 +739,31 @@ export default function App() {
       appendDamageBreakdownLogs(playerBaseDamage, playerVolcanoDamage, playerResonanceDamage, playerDamage, playerRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
       resultLogs.push(zhCN.logs.playerDamage(playerDamage));
     }
+    if (playerForestRecovery > 0) {
+      resultLogs.push('[森林恢复] 成熟森林牌成功命中');
+      resultLogs.push(`[恢复] 玩家 HP：${playerHpAfterDamage} → ${resolvedPlayerHP}`);
+      resultLogs.push(`[恢复] 森林环境恢复：+${playerForestRecovery}`);
+    }
+    if (aiForestRecovery > 0) {
+      resultLogs.push('[森林恢复] 对手通过森林异变牌恢复 HP');
+      resultLogs.push(`[恢复] 对手 HP：${aiHpAfterDamage} → ${resolvedAiHP}`);
+      resultLogs.push(`[恢复] 森林环境恢复：+${aiForestRecovery}`);
+    }
+    const playerSymbiosisTriggered = playerRoleAtClash === 'HOME'
+      ? homeForestRecovery.symbiosisTriggered
+      : guestForestRecovery.symbiosisTriggered;
+    const aiSymbiosisTriggered = aiRoleAtClash === 'HOME'
+      ? homeForestRecovery.symbiosisTriggered
+      : guestForestRecovery.symbiosisTriggered;
+    if (playerSymbiosisTriggered) {
+      resultLogs.push('[羁绊] 触发“共生绽放”');
+    }
+    if (aiSymbiosisTriggered) {
+      resultLogs.push('[羁绊] 对手触发“共生绽放”');
+    }
+    if (forestMutationCountdownReduction > 0) {
+      resultLogs.push('[环境事件] 下一次森林感染倒计时减少 1 轮');
+    }
     if (homeResonanceBonus > 0 || guestResonanceBonus > 0) {
       const burnTargets = [
         ...(homeResonanceBonus > 0 ? [homeTarget === '玩家' ? 'PLAYER' as const : 'AI' as const] : []),
@@ -726,6 +804,13 @@ export default function App() {
       aiResonanceDamage,
       homeResonanceBonus,
       guestResonanceBonus,
+      playerForestRecovery,
+      aiForestRecovery,
+      playerHpAfterDamage,
+      aiHpAfterDamage,
+      playerSymbiosisTriggered,
+      aiSymbiosisTriggered,
+      forestMutationCountdownReduction,
       noDefense: gCards.length === 0,
     });
 
@@ -745,6 +830,27 @@ export default function App() {
           setAiHPShake(false);
           setAiHPFlash(false);
         }, 500);
+      }
+      const recoveryTargets = [
+        ...(playerForestRecovery > 0 || playerSymbiosisTriggered ? ['PLAYER' as const] : []),
+        ...(aiForestRecovery > 0 || aiSymbiosisTriggered ? ['AI' as const] : []),
+      ];
+      if (recoveryTargets.length > 0) {
+        setForestRecoveryFeedback({
+          targets: recoveryTargets,
+          recoveryByTarget: {
+            PLAYER: playerForestRecovery,
+            AI: aiForestRecovery,
+          },
+          symbiosisByTarget: {
+            PLAYER: playerSymbiosisTriggered,
+            AI: aiSymbiosisTriggered,
+          },
+          token: Date.now(),
+        });
+        scheduleSettlementTimer(() => {
+          setForestRecoveryFeedback(null);
+        }, 1100);
       }
       setState(prev => ({
         ...prev,
@@ -833,7 +939,10 @@ export default function App() {
         stateRef.current = latest;
         setState(latest);
 
-        const nextMutationCount = completedClashesSinceMutation + 1;
+        const nextMutationCount = Math.min(
+          MUTATION_INTERVAL_ROUNDS,
+          completedClashesSinceMutation + 1 + forestMutationCountdownReduction
+        );
 
         if (latest.drawPile.length <= 0) {
           setLogs(prev => [...prev, '[环境事件] 公共牌库已耗尽，感染阶段关闭']);
@@ -1767,6 +1876,30 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
+          <AnimatePresence>
+            {forestRecoveryFeedback?.targets.includes('PLAYER') && (
+              <motion.div
+                key={`player-forest-recovery-${forestRecoveryFeedback.token}`}
+                initial={{ opacity: 0, y: 4, scale: 0.94 }}
+                animate={{ opacity: [0, 1, 1, 0], y: [4, -16, -26], scale: [0.94, 1.02, 1] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.05, ease: 'easeOut' }}
+                className="absolute left-2 top-10 rounded-md border border-emerald-500/35 bg-black/78 px-2 py-1 font-mono text-[10px] font-black text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.22)] pointer-events-none text-left"
+              >
+                <div>🌿 森林恢复</div>
+                {forestRecoveryFeedback.recoveryByTarget.PLAYER ? (
+                  <div>HP +{forestRecoveryFeedback.recoveryByTarget.PLAYER}</div>
+                ) : null}
+                {forestRecoveryFeedback.symbiosisByTarget.PLAYER && (
+                  <div className="mt-1 text-[9px] leading-tight text-emerald-100/80">
+                    <div>🌿 共生绽放</div>
+                    <div>森林恢复：+2 HP</div>
+                    <div>下一次感染提前 1 轮</div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="text-center">
@@ -1800,6 +1933,30 @@ export default function App() {
                 {VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣 -{VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage}
                 <span className="absolute -left-3 top-2 text-[10px] opacity-80">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
                 <span className="absolute left-5 -top-2 text-[8px] opacity-60">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {forestRecoveryFeedback?.targets.includes('AI') && (
+              <motion.div
+                key={`ai-forest-recovery-${forestRecoveryFeedback.token}`}
+                initial={{ opacity: 0, y: 4, scale: 0.94 }}
+                animate={{ opacity: [0, 1, 1, 0], y: [4, -16, -26], scale: [0.94, 1.02, 1] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.05, ease: 'easeOut' }}
+                className="absolute right-2 top-10 rounded-md border border-emerald-500/35 bg-black/78 px-2 py-1 font-mono text-[10px] font-black text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.22)] pointer-events-none text-right"
+              >
+                <div>🌿 森林恢复</div>
+                {forestRecoveryFeedback.recoveryByTarget.AI ? (
+                  <div>HP +{forestRecoveryFeedback.recoveryByTarget.AI}</div>
+                ) : null}
+                {forestRecoveryFeedback.symbiosisByTarget.AI && (
+                  <div className="mt-1 text-[9px] leading-tight text-emerald-100/80">
+                    <div>🌿 共生绽放</div>
+                    <div>森林恢复：+2 HP</div>
+                    <div>下一次感染提前 1 轮</div>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -2110,6 +2267,30 @@ export default function App() {
                                   <span className="text-red-300">　灼烧伤害：+{clashResult.playerResonanceDamage}</span>
                                 )}
                                 <span className="text-white/80">　最终伤害：{clashResult.playerHPChange}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {(clashResult.playerForestRecovery > 0 || clashResult.aiForestRecovery > 0 || clashResult.playerSymbiosisTriggered || clashResult.aiSymbiosisTriggered) && (
+                          <div className="mt-2 flex flex-col gap-1 text-[9.5px] font-mono">
+                            {clashResult.playerForestRecovery > 0 && (
+                              <div className="rounded border border-emerald-500/20 bg-emerald-950/10 px-2 py-1 text-emerald-100/85">
+                                <span className="font-black">我方森林恢复</span>
+                                <span className="mx-1 text-emerald-200/40">|</span>
+                                HP +{clashResult.playerForestRecovery}
+                              </div>
+                            )}
+                            {clashResult.aiForestRecovery > 0 && (
+                              <div className="rounded border border-emerald-500/20 bg-emerald-950/10 px-2 py-1 text-emerald-100/85">
+                                <span className="font-black">对手森林恢复</span>
+                                <span className="mx-1 text-emerald-200/40">|</span>
+                                HP +{clashResult.aiForestRecovery}
+                              </div>
+                            )}
+                            {(clashResult.playerSymbiosisTriggered || clashResult.aiSymbiosisTriggered) && (
+                              <div className="rounded border border-emerald-400/25 bg-emerald-900/12 px-2 py-1 text-emerald-200/90">
+                                🌿 共生绽放　森林恢复：+2 HP　下一次感染提前 1 轮
                               </div>
                             )}
                           </div>

@@ -45,6 +45,34 @@ export const getForestMutationCandidates = (hand: Card[]) =>
 export const countAllMutatedCards = (hand: Card[]) =>
   hand.filter(card => card.mutationType).length;
 
+export const calculateForestRecovery = ({
+  successfulMatureForestHits,
+  playedMatureForestCards,
+  currentHp,
+  maxHp,
+}: {
+  successfulMatureForestHits: number;
+  playedMatureForestCards: number;
+  currentHp: number;
+  maxHp: number;
+}) => {
+  const baseRecovery = successfulMatureForestHits;
+  const symbiosisTriggered =
+    playedMatureForestCards >= 2
+    && successfulMatureForestHits >= 1;
+  const symbiosisBonus = symbiosisTriggered ? 1 : 0;
+  const cappedRecovery = Math.min(baseRecovery + symbiosisBonus, 2);
+  const finalRecovery = Math.min(cappedRecovery, Math.max(0, maxHp - currentHp));
+
+  return {
+    baseRecovery,
+    symbiosisTriggered,
+    symbiosisBonus,
+    cappedRecovery,
+    finalRecovery,
+  };
+};
+
 export const calculateVolcanoMutationBonus = (successfulVolcanoHits: number) =>
   Math.min(successfulVolcanoHits, VOLCANO_ENVIRONMENT_CONFIG.maxMutationDamageBonusPerClash);
 

@@ -19,7 +19,15 @@ export const FOREST_ENVIRONMENT_CONFIG = {
   maxMutationCardsPerSide: 3,
 } as const;
 
-export const ACTIVE_ENVIRONMENT_CONFIG = FOREST_ENVIRONMENT_CONFIG;
+export const GLACIER_ENVIRONMENT_CONFIG = {
+  id: 'GLACIER',
+  name: '冰川事件',
+  icon: '❄️',
+  mutationIntervalRounds: 2,
+  maxMutationCardsPerSide: 3,
+} as const;
+
+export const ACTIVE_ENVIRONMENT_CONFIG = GLACIER_ENVIRONMENT_CONFIG;
 
 export const MUTATION_LIMIT = ACTIVE_ENVIRONMENT_CONFIG.maxMutationCardsPerSide;
 export const MUTATION_INTERVAL_ROUNDS = ACTIVE_ENVIRONMENT_CONFIG.mutationIntervalRounds;
@@ -40,6 +48,9 @@ export const countMutatedCards = (hand: Card[]) =>
   hand.filter(card => card.mutationType === 'VOLCANO').length;
 
 export const getForestMutationCandidates = (hand: Card[]) =>
+  shuffleCards(hand.filter(card => !card.mutationType)).slice(0, 2);
+
+export const getGlacierMutationCandidates = (hand: Card[]) =>
   shuffleCards(hand.filter(card => !card.mutationType)).slice(0, 2);
 
 export const countAllMutatedCards = (hand: Card[]) =>
@@ -158,6 +169,17 @@ export const applyMutationToCard = (
           : {}),
       }
     : card;
+
+export const removeMutationFromCard = (card: Card): Card => {
+  const {
+    mutationType,
+    forestGrowthStage,
+    forestMatureAfterClash,
+    ...normalCard
+  } = card;
+
+  return normalCard;
+};
 
 export const advanceForestGrowth = ({
   hand,

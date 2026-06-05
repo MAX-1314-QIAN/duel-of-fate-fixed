@@ -1,5 +1,5 @@
 export type CardType = 'ROCK' | 'PAPER' | 'SCISSORS';
-export type MutationType = 'VOLCANO' | 'FOREST';
+export type MutationType = 'VOLCANO' | 'FOREST' | 'GLACIER';
 export type ForestGrowthStage = 'SEEDLING' | 'MATURE';
 
 export interface Card {

@@ -146,8 +146,12 @@ export const getVolcanoResonanceBonus = ({
   }).resonanceBonus;
 };
 
-export const canTriggerMutation = (sharedDeckCount: number, mutationCount: number) =>
-  sharedDeckCount > 0 && mutationCount >= MUTATION_INTERVAL_ROUNDS;
+export const canTriggerMutation = (
+  sharedDeckCount: number,
+  mutationCount: number,
+  mutationIntervalRounds = MUTATION_INTERVAL_ROUNDS,
+) =>
+  sharedDeckCount > 0 && mutationCount >= mutationIntervalRounds;
 
 export const selectAiMutationCandidate = (candidates: Card[], aiHand: Card[]) => {
   if (candidates.length === 0) return null;

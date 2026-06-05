@@ -5,12 +5,9 @@ import { Card, CardType, GameState, MutationType, WIN_MAP } from './types';
 import { zhCN } from './locales/zh-CN';
 import { allocateLimitedSharedDeckDraws, DrawQueueItem } from './game/sharedDeck';
 import {
-  DEFAULT_ENVIRONMENT_ROUTE,
   ENVIRONMENT_ROUTE_CONFIG,
   FOREST_ENVIRONMENT_CONFIG,
   GLACIER_ENVIRONMENT_CONFIG,
-  MUTATION_INTERVAL_ROUNDS,
-  MUTATION_LIMIT,
   VOLCANO_ENVIRONMENT_CONFIG,
   advanceForestGrowth,
   applyMutationToCard,
@@ -24,6 +21,7 @@ import {
   removeMutationFromCard,
   selectAiMutationCandidate,
 } from './game/environment';
+import { GAME_MODE_CONFIG, GameMode } from './game/mode';
 
 const INITIAL_HP = 10;
 const MAX_HAND = 4;
@@ -60,7 +58,7 @@ const forestIcon = (card: Card) =>
   card.forestGrowthStage === 'MATURE' ? '🌿' : '🌱';
 const isMatureForestCard = (card: Card) =>
   card.mutationType === 'FOREST' && card.forestGrowthStage === 'MATURE';
-type RoutedEnvironmentType = typeof DEFAULT_ENVIRONMENT_ROUTE[number];
+type RoutedEnvironmentType = 'VOLCANO' | 'FOREST' | 'GLACIER';
 const ENVIRONMENT_CONFIG_BY_ID = {
   VOLCANO: VOLCANO_ENVIRONMENT_CONFIG,
   FOREST: FOREST_ENVIRONMENT_CONFIG,
@@ -292,6 +290,7 @@ export default function App() {
 
   const [screen, setScreen] = useState<'HOME' | 'BATTLE'>('HOME');
   const [selectedProtocol, setSelectedProtocol] = useState<'QUICK' | 'TRAINING' | 'CHALLENGE' | null>(null);
+  const [gameMode, setGameMode] = useState<GameMode>('QUICK');
   const [homeLogs, setHomeLogs] = useState<string[]>([
     zhCN.logs.battleEngineOnline,
     zhCN.logs.selectProtocol,
@@ -418,8 +417,10 @@ export default function App() {
     };
   }, []);
 
-  const resetGame = () => {
+  const resetGame = (mode: GameMode = gameMode) => {
     clearSettlementTimers();
+    const modeConfig = GAME_MODE_CONFIG[mode];
+    const initialEnvironment = modeConfig.environmentRoute[0];
     const newDeck = createDeck();
     const nextState: GameState = {
       playerHP: INITIAL_HP,
@@ -438,6 +439,7 @@ export default function App() {
       aiDiscardPile: [],
     };
     stateRef.current = nextState;
+    setGameMode(mode);
     setState(nextState);
     setSelectedCards([]);
     setClashResult(null);
@@ -458,8 +460,11 @@ export default function App() {
     completedClashesSinceMutationRef.current = 0;
     setEnvironmentRouteIndex(0);
     environmentRouteIndexRef.current = 0;
-    setEnvironmentRoundsRemaining(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
-    environmentRoundsRemainingRef.current = ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment;
+    const resetRoundsPerEnvironment = 'roundsPerEnvironment' in modeConfig
+      ? modeConfig.roundsPerEnvironment
+      : ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment;
+    setEnvironmentRoundsRemaining(resetRoundsPerEnvironment);
+    environmentRoundsRemainingRef.current = resetRoundsPerEnvironment;
     setEnvironmentSwitchNotice(null);
     setCompletedClashCount(0);
     completedClashCountRef.current = 0;
@@ -486,11 +491,21 @@ export default function App() {
     setSharedDeckTransit(null);
     setSharedDeckScale(false);
     setActiveAnims([]);
-    setLogs([
-      zhCN.logs.reset,
-      '[环境路线] 当前环境：火山',
-      '[环境路线] 下一环境：森林',
-    ]);
+    setLogs(mode === 'QUICK'
+      ? [
+          zhCN.logs.reset,
+          `[模式] 当前模式：${modeConfig.name}`,
+          `[环境事件] 当前环境：${environmentLabel(initialEnvironment)}`,
+          `[环境事件] 下一次感染：${modeConfig.mutationIntervalRounds} 轮后`,
+        ]
+      : [
+          zhCN.logs.reset,
+          `[模式] 当前模式：${modeConfig.name}`,
+          '[环境路线] 火山 → 森林 → 冰川',
+          `[环境路线] 当前环境：${environmentLabel(initialEnvironment)}`,
+          `[环境事件] 下一次感染：${modeConfig.mutationIntervalRounds} 轮后`,
+        ]
+    );
   };
 
   const returnToLobby = () => {
@@ -513,11 +528,18 @@ export default function App() {
     }, 780);
   }, [scheduleSettlementTimer]);
 
-  const activeEnvironmentType = DEFAULT_ENVIRONMENT_ROUTE[environmentRouteIndex];
+  const currentModeConfig = GAME_MODE_CONFIG[gameMode];
+  const currentEnvironmentRoute = currentModeConfig.environmentRoute;
+  const mutationLimit = currentModeConfig.mutationLimit;
+  const mutationIntervalRounds = currentModeConfig.mutationIntervalRounds;
+  const roundsPerEnvironment = 'roundsPerEnvironment' in currentModeConfig
+    ? currentModeConfig.roundsPerEnvironment
+    : ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment;
+  const activeEnvironmentType = currentEnvironmentRoute[environmentRouteIndex % currentEnvironmentRoute.length];
   const activeEnvironmentConfig = ENVIRONMENT_CONFIG_BY_ID[activeEnvironmentType];
-  const nextEnvironmentType = DEFAULT_ENVIRONMENT_ROUTE[(environmentRouteIndex + 1) % DEFAULT_ENVIRONMENT_ROUTE.length];
+  const nextEnvironmentType = currentEnvironmentRoute[(environmentRouteIndex + 1) % currentEnvironmentRoute.length];
   const nextEnvironmentConfig = ENVIRONMENT_CONFIG_BY_ID[nextEnvironmentType];
-  const upcomingEnvironmentType = DEFAULT_ENVIRONMENT_ROUTE[(environmentRouteIndex + 2) % DEFAULT_ENVIRONMENT_ROUTE.length];
+  const upcomingEnvironmentType = currentEnvironmentRoute[(environmentRouteIndex + 2) % currentEnvironmentRoute.length];
   const upcomingEnvironmentConfig = ENVIRONMENT_CONFIG_BY_ID[upcomingEnvironmentType];
   const activeMutationType = activeEnvironmentType as unknown as MutationType;
   const activeMutationLabel = environmentLabel(activeMutationType);
@@ -536,32 +558,34 @@ export default function App() {
   const playerGlacierMutationCount = state.playerHand.filter(card => card.mutationType === 'GLACIER').length;
 
   const switchToNextEnvironmentIfNeeded = useCallback(() => {
+    if (currentEnvironmentRoute.length <= 1) return;
+
     const remaining = environmentRoundsRemainingRef.current;
     if (remaining > 0 || stateRef.current.drawPile.length <= 0) return;
 
     const currentIndex = environmentRouteIndexRef.current;
-    const from = DEFAULT_ENVIRONMENT_ROUTE[currentIndex];
-    const nextIndex = (currentIndex + 1) % DEFAULT_ENVIRONMENT_ROUTE.length;
-    const to = DEFAULT_ENVIRONMENT_ROUTE[nextIndex];
+    const from = currentEnvironmentRoute[currentIndex % currentEnvironmentRoute.length];
+    const nextIndex = (currentIndex + 1) % currentEnvironmentRoute.length;
+    const to = currentEnvironmentRoute[nextIndex];
 
     environmentRouteIndexRef.current = nextIndex;
-    environmentRoundsRemainingRef.current = ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment;
+    environmentRoundsRemainingRef.current = roundsPerEnvironment;
     completedClashesSinceMutationRef.current = 0;
     setEnvironmentRouteIndex(nextIndex);
-    setEnvironmentRoundsRemaining(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
+    setEnvironmentRoundsRemaining(roundsPerEnvironment);
     setCompletedClashesSinceMutation(0);
     setEnvironmentSwitchNotice({ from, to, token: Date.now() });
     setLogs(prev => [
       ...prev,
       `[环境切换] ${environmentLabel(from)} → ${environmentLabel(to)}`,
       `[环境路线] 当前环境：${environmentLabel(to)}`,
-      `[环境路线] 下一环境：${environmentLabel(DEFAULT_ENVIRONMENT_ROUTE[(nextIndex + 1) % DEFAULT_ENVIRONMENT_ROUTE.length])}`,
+      `[环境路线] 下一环境：${environmentLabel(currentEnvironmentRoute[(nextIndex + 1) % currentEnvironmentRoute.length])}`,
     ]);
     showMutationPhaseNotice(`环境切换：${ENVIRONMENT_CONFIG_BY_ID[from].icon} ${environmentLabel(from)} → ${ENVIRONMENT_CONFIG_BY_ID[to].icon} ${environmentLabel(to)}`, 850);
     scheduleSettlementTimer(() => {
       setEnvironmentSwitchNotice(null);
     }, 900);
-  }, [scheduleSettlementTimer, showMutationPhaseNotice]);
+  }, [currentEnvironmentRoute, roundsPerEnvironment, scheduleSettlementTimer, showMutationPhaseNotice]);
 
   const finishMutationStage = useCallback((playerCardId?: string) => {
     setState(prev => {
@@ -584,7 +608,7 @@ export default function App() {
       }
 
       let aiHand = prev.aiHand;
-      if (countAllMutatedCards(aiHand) >= MUTATION_LIMIT) {
+      if (countAllMutatedCards(aiHand) >= mutationLimit) {
         logsToAppend.push('[环境事件] 对手异变牌已达上限，本次感染跳过');
       } else {
         const aiCandidates = getActiveMutationCandidates(aiHand);
@@ -592,7 +616,7 @@ export default function App() {
         if (selectedAiCard) {
           aiHand = aiHand.map(applyMutationToCard(selectedAiCard.id, activeMutationType, completedClashCountRef.current));
           logsToAppend.push('[环境事件] 对手获得 1 张异变牌');
-          logsToAppend.push(`[对手异变牌] 当前总数：${countAllMutatedCards(aiHand)} / ${MUTATION_LIMIT}`);
+          logsToAppend.push(`[对手异变牌] 当前总数：${countAllMutatedCards(aiHand)} / ${mutationLimit}`);
           setMutationAnimation({ side: 'AI', token: Date.now() });
           setAiMutationCountPulse(true);
           showMutationPhaseNotice('对手完成感染', 700);
@@ -638,7 +662,7 @@ export default function App() {
         continueTurn();
       }, 300);
     }
-  }, [activeMutationLabel, activeMutationType, getActiveMutationCandidates, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded]);
+  }, [activeMutationLabel, activeMutationType, getActiveMutationCandidates, mutationLimit, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded]);
 
   const handleMutationPick = useCallback((cardId: string) => {
     const selectedCandidate = mutationCandidates.find(card => card.id === cardId);
@@ -1119,10 +1143,15 @@ export default function App() {
         const nextEnvironmentRoundsRemaining = Math.max(0, environmentRoundsRemainingRef.current - 1);
         environmentRoundsRemainingRef.current = nextEnvironmentRoundsRemaining;
         setEnvironmentRoundsRemaining(nextEnvironmentRoundsRemaining);
-        setLogs(prev => [...prev, `[环境路线] ${activeMutationLabel}阶段剩余：${nextEnvironmentRoundsRemaining} 轮`]);
+        setLogs(prev => [
+          ...prev,
+          currentModeConfig.environmentMode === 'ROTATION'
+            ? `[环境路线] ${activeMutationLabel}阶段剩余：${nextEnvironmentRoundsRemaining} 轮`
+            : `[环境事件] ${activeMutationLabel}环境持续中`,
+        ]);
 
         const nextMutationCount = Math.min(
-          MUTATION_INTERVAL_ROUNDS,
+          mutationIntervalRounds,
           completedClashesSinceMutationRef.current + 1 + forestMutationCountdownReduction
         );
 
@@ -1132,10 +1161,10 @@ export default function App() {
           return;
         }
 
-        if (!canTriggerMutation(latest.drawPile.length, nextMutationCount)) {
+        if (!canTriggerMutation(latest.drawPile.length, nextMutationCount, mutationIntervalRounds)) {
           completedClashesSinceMutationRef.current = nextMutationCount;
           setCompletedClashesSinceMutation(nextMutationCount);
-          const roundsRemaining = MUTATION_INTERVAL_ROUNDS - nextMutationCount;
+          const roundsRemaining = mutationIntervalRounds - nextMutationCount;
           if (roundsRemaining === 1) {
             setLogs(prev => [...prev, `[环境事件] ${activeMutationLabel}感染将在 1 轮后触发`]);
           }
@@ -1153,7 +1182,7 @@ export default function App() {
         showMutationPhaseNotice(`${activeMutationLabel}感染阶段`, 700);
         pulseMutationEvent();
 
-        if (countAllMutatedCards(latest.playerHand) >= MUTATION_LIMIT) {
+        if (countAllMutatedCards(latest.playerHand) >= mutationLimit) {
           setLogs(prev => [...prev, '[环境事件] 我方异变牌已达上限，本次感染跳过']);
           finishMutationStage();
           return;
@@ -1441,7 +1470,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, finishMutationStage, getActiveMutationCandidates, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
+  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentModeConfig.environmentMode, finishMutationStage, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -1791,9 +1820,9 @@ export default function App() {
   const showGlacierEchoPreview = selectedGlacierCards.length >= 2 && !isRerollMode && isPlayerTurnState;
   const mutationRoundsRemaining = state.drawPile.length === 0
     ? 0
-    : MUTATION_INTERVAL_ROUNDS - completedClashesSinceMutation;
+    : mutationIntervalRounds - completedClashesSinceMutation;
   const isMutationImminent = state.phase === 'RESOLVE'
-    && completedClashesSinceMutation === MUTATION_INTERVAL_ROUNDS - 1
+    && completedClashesSinceMutation === mutationIntervalRounds - 1
     && state.drawPile.length > 0;
   const isMutationProcessing = mutationCandidates.length > 0 || mutationAnimation !== null;
   const mutationEventStatus = state.drawPile.length === 0
@@ -2019,7 +2048,7 @@ export default function App() {
                 </h3>
                 <p className="text-[11px] font-medium text-text-dim/80 mt-1 mb-5 leading-normal">
                   {zhCN.home.quickMatch}
-                  <span className="block text-[10px] text-text-dim/50 mt-1">{zhCN.home.quickDescription}</span>
+                  <span className="block text-[10px] text-text-dim/50 mt-1">单一火山环境，适合快速体验基础异变牌玩法</span>
                 </p>
               </div>
 
@@ -2032,7 +2061,7 @@ export default function App() {
                     zhCN.logs.initializingBattlefield,
                   ]);
                   setTimeout(() => {
-                    resetGame();
+                    resetGame('QUICK');
                     setScreen('BATTLE');
                   }, 800);
                 }}
@@ -2084,33 +2113,57 @@ export default function App() {
             {/* Mode 3: Challenge */}
             <div 
               onClick={() => {
-                setHomeLogs(prev => [
-                  ...prev,
-                  zhCN.logs.protocolUnavailable,
-                ]);
+                if (selectedProtocol !== 'CHALLENGE') {
+                  setSelectedProtocol('CHALLENGE');
+                  setHomeLogs(prev => [
+                    ...prev,
+                    '[系统] 已选择挑战模式',
+                    zhCN.logs.readyToInitialize,
+                  ]);
+                }
               }}
-              className="w-[275px] p-5 rounded-xl border border-fuchsia-950/45 bg-[#130c16] flex flex-col justify-between transition-all duration-300 opacity-75 hover:border-fuchsia-750/50 group select-none cursor-pointer"
+              className={`w-[275px] p-5 rounded-xl border bg-[#130c16] flex flex-col justify-between transition-all duration-300 cursor-pointer ${
+                selectedProtocol === 'CHALLENGE'
+                  ? 'border-fuchsia-400/70 shadow-[0_0_25px_rgba(217,70,239,0.16)] bg-[#190f1d]'
+                  : 'border-fuchsia-950/45 hover:border-fuchsia-700/50'
+              }`}
             >
               <div>
                 <div className="flex items-center justify-between mb-3 text-[9px] font-bold font-mono">
-                  <span className="text-fuchsia-400/80 bg-fuchsia-950/55 border border-fuchsia-900/40 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center">
-                    <Lock className="w-2.5 h-2.5 mr-1 text-fuchsia-400/70" />
-                    {zhCN.home.locked}
+                  <span className="text-fuchsia-300 bg-fuchsia-500/10 border border-fuchsia-500/30 px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center">
+                    {zhCN.home.available}
                   </span>
                   <span className="text-fuchsia-500/50 font-mono font-bold">协议 03</span>
                 </div>
-                <h3 className="text-[15px] font-black tracking-wide text-fuchsia-400/90 uppercase transition-colors">
+                <h3 className={`text-[15px] font-black tracking-wide uppercase transition-colors ${
+                  selectedProtocol === 'CHALLENGE' ? 'text-fuchsia-200' : 'text-fuchsia-400/90'
+                }`}>
                   {zhCN.home.challenge}
                 </h3>
                 <p className="text-[11px] font-medium text-text-dim/70 mt-1 mb-5 leading-normal">
                   {zhCN.home.challenge}
-                  <span className="block text-[10px] text-fuchsia-500/45 mt-1">{zhCN.home.challengeDescription}</span>
+                  <span className="block text-[10px] text-fuchsia-300/55 mt-1">火山、森林与冰川循环轮替，适合体验多环境构筑</span>
                 </p>
               </div>
 
               <button
-                disabled
-                className="w-full py-2.5 rounded-lg text-xs font-black tracking-widest uppercase bg-fuchsia-950/20 text-fuchsia-400/35 border border-fuchsia-900/30 cursor-not-allowed"
+                disabled={selectedProtocol !== 'CHALLENGE'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setHomeLogs(prev => [
+                    ...prev,
+                    zhCN.logs.initializingBattlefield,
+                  ]);
+                  setTimeout(() => {
+                    resetGame('CHALLENGE');
+                    setScreen('BATTLE');
+                  }, 800);
+                }}
+                className={`w-full py-2.5 rounded-lg text-xs font-black tracking-widest uppercase transition-all duration-300 cursor-pointer disabled:cursor-not-allowed ${
+                  selectedProtocol === 'CHALLENGE'
+                    ? 'bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-fuchsia-500/15'
+                    : 'bg-fuchsia-950/20 text-fuchsia-400/35 border border-fuchsia-900/30'
+                }`}
               >
                 {zhCN.home.startBattle}
               </button>
@@ -2378,7 +2431,7 @@ export default function App() {
               )}
               <div className="flex flex-col gap-4 items-center">
                 <button 
-                  onClick={resetGame}
+                  onClick={() => resetGame()}
                   className="w-[280px] bg-accent text-black py-3 px-8 rounded-lg font-bold uppercase tracking-widest hover:opacity-80 transition-all flex flex-col items-center justify-center cursor-pointer"
                 >
                   <span className="text-[13px] leading-tight tracking-[0.2em] font-black">{zhCN.gameOver.restartMission}</span>
@@ -2394,29 +2447,40 @@ export default function App() {
           ) : (
             <div key="battle" className="flex flex-col gap-6 items-center relative">
               <div className={`route-event-panel route-event-panel--${activeEnvironmentType.toLowerCase()} absolute -top-20 left-1/2 -translate-x-1/2 w-[286px] rounded-md border px-3 py-2 text-center font-mono ${mutationEventPulse ? 'route-event-panel--pulse' : ''}`}>
-                <div className="relative z-10 text-[8px] font-black tracking-[0.22em] text-white/42">环境路线</div>
-                <div className="relative z-10 mt-1 flex items-center justify-center gap-1.5">
-                  <div className="min-w-[82px] text-right">
-                    <div className="text-[12px] font-black tracking-widest text-white/90">
-                      <span aria-hidden="true">{activeEnvironmentConfig.icon}</span> {environmentLabel(activeEnvironmentType)}
+                <div className="relative z-10 text-[8px] font-black tracking-[0.22em] text-white/42">{currentModeConfig.name}</div>
+                {currentModeConfig.environmentMode === 'SINGLE' ? (
+                  <div className="relative z-10 mt-1 flex flex-col items-center justify-center">
+                    <div className="text-[13px] font-black tracking-widest text-white/90">
+                      <span aria-hidden="true">{activeEnvironmentConfig.icon}</span> {environmentLabel(activeEnvironmentType)}环境
                     </div>
-                    <div className="mt-0.5 text-[8px] font-bold text-white/52">当前环境 · 剩余 {environmentRoundsRemaining} 轮</div>
                   </div>
-                  <div className="text-[13px] font-black text-white/35">→</div>
-                  <div className="min-w-[70px] text-left">
-                    <div className="text-[10px] font-black tracking-widest text-white/62">
-                      <span aria-hidden="true">{nextEnvironmentConfig.icon}</span> {environmentLabel(nextEnvironmentType)}
+                ) : (
+                  <>
+                    <div className="relative z-10 mt-0.5 text-[8px] font-black tracking-[0.22em] text-white/35">环境路线</div>
+                    <div className="relative z-10 mt-1 flex items-center justify-center gap-1.5">
+                      <div className="min-w-[82px] text-right">
+                        <div className="text-[12px] font-black tracking-widest text-white/90">
+                          <span aria-hidden="true">{activeEnvironmentConfig.icon}</span> {environmentLabel(activeEnvironmentType)}
+                        </div>
+                        <div className="mt-0.5 text-[8px] font-bold text-white/52">当前环境 · 剩余 {environmentRoundsRemaining} 轮</div>
+                      </div>
+                      <div className="text-[13px] font-black text-white/35">→</div>
+                      <div className="min-w-[70px] text-left">
+                        <div className="text-[10px] font-black tracking-widest text-white/62">
+                          <span aria-hidden="true">{nextEnvironmentConfig.icon}</span> {environmentLabel(nextEnvironmentType)}
+                        </div>
+                        <div className="mt-0.5 text-[8px] font-bold text-white/38">下一环境</div>
+                      </div>
+                      <div className="text-[13px] font-black text-white/26">→</div>
+                      <div className="min-w-[70px] text-left">
+                        <div className="text-[10px] font-black tracking-widest text-white/50">
+                          <span aria-hidden="true">{upcomingEnvironmentConfig.icon}</span> {environmentLabel(upcomingEnvironmentType)}
+                        </div>
+                        <div className="mt-0.5 text-[8px] font-bold text-white/30">后续环境</div>
+                      </div>
                     </div>
-                    <div className="mt-0.5 text-[8px] font-bold text-white/38">下一环境</div>
-                  </div>
-                  <div className="text-[13px] font-black text-white/26">→</div>
-                  <div className="min-w-[70px] text-left">
-                    <div className="text-[10px] font-black tracking-widest text-white/50">
-                      <span aria-hidden="true">{upcomingEnvironmentConfig.icon}</span> {environmentLabel(upcomingEnvironmentType)}
-                    </div>
-                    <div className="mt-0.5 text-[8px] font-bold text-white/30">后续环境</div>
-                  </div>
-                </div>
+                  </>
+                )}
                 <div className="relative z-10 mt-1 text-[9px] font-semibold text-white/70">
                   {mutationEventStatus.startsWith('下一次感染：') ? (
                     <>
@@ -2433,8 +2497,8 @@ export default function App() {
               {/* AI Battle Slot */}
               <div className="flex gap-4 min-h-[140px] items-center">
                 <div className={`absolute -right-32 top-8 min-w-[120px] text-[10px] font-mono font-bold text-white/70 tracking-wider transition-transform duration-200 ${aiMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
-                  <div>对手异变牌：{aiMutationCount} / {MUTATION_LIMIT}</div>
-                  {aiMutationCount >= MUTATION_LIMIT && (
+                  <div>对手异变牌：{aiMutationCount} / {mutationLimit}</div>
+                  {aiMutationCount >= mutationLimit && (
                     <div className="mt-0.5 text-[9px] text-emerald-200/45">已达上限</div>
                   )}
                 </div>
@@ -2901,13 +2965,13 @@ export default function App() {
         {/* CENTER COLUMN: ACTIVE HAND CARDS & CONTROL BUTTONS */}
         <div className="flex-1 flex flex-col items-center justify-center gap-5">
           <div className={`text-[10px] font-mono font-bold text-white/75 tracking-wider leading-tight text-center transition-transform duration-200 ${playerMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
-            <div>异变牌：{playerMutationCount} / {MUTATION_LIMIT}</div>
+            <div>异变牌：{playerMutationCount} / {mutationLimit}</div>
             <div className="mt-0.5 flex justify-center gap-3 text-[9px]">
               <span className="text-orange-200/85">🔥 {playerVolcanoMutationCount}</span>
               <span className="text-emerald-200/85">🌿 {playerForestMutationCount}</span>
               <span className="text-cyan-100/85">❄️ {playerGlacierMutationCount}</span>
             </div>
-            {playerMutationCount >= MUTATION_LIMIT && (
+            {playerMutationCount >= mutationLimit && (
               <div className="mt-0.5 text-[9px] text-emerald-200/45">已达上限</div>
             )}
           </div>

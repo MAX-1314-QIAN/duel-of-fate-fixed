@@ -27,10 +27,14 @@ export const GLACIER_ENVIRONMENT_CONFIG = {
   maxMutationCardsPerSide: 3,
 } as const;
 
-export const DEFAULT_ENVIRONMENT_ROUTE = ['VOLCANO', 'FOREST'] as const;
+export const DEFAULT_ENVIRONMENT_ROUTE = [
+  'VOLCANO',
+  'FOREST',
+  'GLACIER',
+] as const;
 
 export const ENVIRONMENT_ROUTE_CONFIG = {
-  roundsPerEnvironment: 4,
+  roundsPerEnvironment: 2,
   mutationIntervalRounds: 2,
 } as const;
 

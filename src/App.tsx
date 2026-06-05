@@ -8,6 +8,7 @@ import {
   DEFAULT_ENVIRONMENT_ROUTE,
   ENVIRONMENT_ROUTE_CONFIG,
   FOREST_ENVIRONMENT_CONFIG,
+  GLACIER_ENVIRONMENT_CONFIG,
   MUTATION_INTERVAL_ROUNDS,
   MUTATION_LIMIT,
   VOLCANO_ENVIRONMENT_CONFIG,
@@ -63,6 +64,7 @@ type RoutedEnvironmentType = typeof DEFAULT_ENVIRONMENT_ROUTE[number];
 const ENVIRONMENT_CONFIG_BY_ID = {
   VOLCANO: VOLCANO_ENVIRONMENT_CONFIG,
   FOREST: FOREST_ENVIRONMENT_CONFIG,
+  GLACIER: GLACIER_ENVIRONMENT_CONFIG,
 } as const;
 const environmentLabel = (type: MutationType) =>
   type === 'VOLCANO' ? '火山' : type === 'FOREST' ? '森林' : '冰川';
@@ -515,6 +517,8 @@ export default function App() {
   const activeEnvironmentConfig = ENVIRONMENT_CONFIG_BY_ID[activeEnvironmentType];
   const nextEnvironmentType = DEFAULT_ENVIRONMENT_ROUTE[(environmentRouteIndex + 1) % DEFAULT_ENVIRONMENT_ROUTE.length];
   const nextEnvironmentConfig = ENVIRONMENT_CONFIG_BY_ID[nextEnvironmentType];
+  const upcomingEnvironmentType = DEFAULT_ENVIRONMENT_ROUTE[(environmentRouteIndex + 2) % DEFAULT_ENVIRONMENT_ROUTE.length];
+  const upcomingEnvironmentConfig = ENVIRONMENT_CONFIG_BY_ID[upcomingEnvironmentType];
   const activeMutationType = activeEnvironmentType as unknown as MutationType;
   const activeMutationLabel = environmentLabel(activeMutationType);
   const isVolcanoEnvironment = activeMutationType === 'VOLCANO';
@@ -529,6 +533,7 @@ export default function App() {
         : getForestMutationCandidates(hand);
   const playerVolcanoMutationCount = state.playerHand.filter(card => card.mutationType === 'VOLCANO').length;
   const playerForestMutationCount = state.playerHand.filter(card => card.mutationType === 'FOREST').length;
+  const playerGlacierMutationCount = state.playerHand.filter(card => card.mutationType === 'GLACIER').length;
 
   const switchToNextEnvironmentIfNeeded = useCallback(() => {
     const remaining = environmentRoundsRemainingRef.current;
@@ -586,10 +591,11 @@ export default function App() {
         const selectedAiCard = selectAiMutationCandidate(aiCandidates, aiHand);
         if (selectedAiCard) {
           aiHand = aiHand.map(applyMutationToCard(selectedAiCard.id, activeMutationType, completedClashCountRef.current));
-          logsToAppend.push(`[环境事件] 对手获得 1 张${activeMutationLabel}异变牌`);
+          logsToAppend.push('[环境事件] 对手获得 1 张异变牌');
+          logsToAppend.push(`[对手异变牌] 当前总数：${countAllMutatedCards(aiHand)} / ${MUTATION_LIMIT}`);
           setMutationAnimation({ side: 'AI', token: Date.now() });
           setAiMutationCountPulse(true);
-          showMutationPhaseNotice(`对手完成${activeMutationLabel}感染`, 700);
+          showMutationPhaseNotice('对手完成感染', 700);
           scheduleSettlementTimer(() => {
             setMutationAnimation(null);
             setAiMutationCountPulse(false);
@@ -2371,19 +2377,26 @@ export default function App() {
             <div key="battle" className="flex flex-col gap-6 items-center relative">
               <div className={`route-event-panel route-event-panel--${activeEnvironmentType.toLowerCase()} absolute -top-20 left-1/2 -translate-x-1/2 w-[286px] rounded-md border px-3 py-2 text-center font-mono ${mutationEventPulse ? 'route-event-panel--pulse' : ''}`}>
                 <div className="relative z-10 text-[8px] font-black tracking-[0.22em] text-white/42">环境路线</div>
-                <div className="relative z-10 mt-1 flex items-center justify-center gap-2">
-                  <div className="min-w-[96px] text-right">
+                <div className="relative z-10 mt-1 flex items-center justify-center gap-1.5">
+                  <div className="min-w-[82px] text-right">
                     <div className="text-[12px] font-black tracking-widest text-white/90">
                       <span aria-hidden="true">{activeEnvironmentConfig.icon}</span> {environmentLabel(activeEnvironmentType)}
                     </div>
                     <div className="mt-0.5 text-[8px] font-bold text-white/52">当前环境 · 剩余 {environmentRoundsRemaining} 轮</div>
                   </div>
                   <div className="text-[13px] font-black text-white/35">→</div>
-                  <div className="min-w-[82px] text-left">
+                  <div className="min-w-[70px] text-left">
                     <div className="text-[10px] font-black tracking-widest text-white/62">
                       <span aria-hidden="true">{nextEnvironmentConfig.icon}</span> {environmentLabel(nextEnvironmentType)}
                     </div>
                     <div className="mt-0.5 text-[8px] font-bold text-white/38">下一环境</div>
+                  </div>
+                  <div className="text-[13px] font-black text-white/26">→</div>
+                  <div className="min-w-[70px] text-left">
+                    <div className="text-[10px] font-black tracking-widest text-white/50">
+                      <span aria-hidden="true">{upcomingEnvironmentConfig.icon}</span> {environmentLabel(upcomingEnvironmentType)}
+                    </div>
+                    <div className="mt-0.5 text-[8px] font-bold text-white/30">后续环境</div>
                   </div>
                 </div>
                 <div className="relative z-10 mt-1 text-[9px] font-semibold text-white/70">
@@ -2874,6 +2887,7 @@ export default function App() {
             <div className="mt-0.5 flex justify-center gap-3 text-[9px]">
               <span className="text-orange-200/85">🔥 {playerVolcanoMutationCount}</span>
               <span className="text-emerald-200/85">🌿 {playerForestMutationCount}</span>
+              <span className="text-cyan-100/85">❄️ {playerGlacierMutationCount}</span>
             </div>
             {playerMutationCount >= MUTATION_LIMIT && (
               <div className="mt-0.5 text-[9px] text-emerald-200/45">已达上限</div>
@@ -3499,7 +3513,7 @@ export default function App() {
               transition={{ duration: 0.62, ease: 'easeOut' }}
               className={`absolute left-1/2 top-[86px] -translate-x-1/2 w-[260px] h-[86px] rounded-full border ${isGlacierEnvironment ? 'border-cyan-300/20 bg-cyan-300/[0.08] shadow-[0_0_30px_rgba(34,211,238,0.18)] text-cyan-100/85' : 'border-emerald-500/20 bg-emerald-500/[0.08] shadow-[0_0_30px_rgba(16,185,129,0.22)] text-emerald-200/85'} flex items-center justify-center font-mono text-[11px] font-black tracking-wider`}
             >
-              对手获得 1 张{activeMutationLabel}异变牌
+              对手获得 1 张异变牌
             </motion.div>
           )}
         </AnimatePresence>
@@ -3625,6 +3639,12 @@ export default function App() {
           border-color: rgba(16, 185, 129, 0.34);
           background: rgba(6, 19, 14, 0.92);
           box-shadow: 0 0 16px rgba(16,185,129,0.12), inset 0 0 18px rgba(16,185,129,0.04);
+        }
+
+        .route-event-panel--glacier {
+          border-color: rgba(125, 211, 252, 0.34);
+          background: rgba(6, 18, 26, 0.92);
+          box-shadow: 0 0 16px rgba(34,211,238,0.12), inset 0 0 18px rgba(34,211,238,0.04);
         }
 
         .route-event-panel--pulse {

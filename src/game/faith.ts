@@ -62,6 +62,15 @@ export const DEER_SPIRIT_CONFIG = {
   surgeMaxHpCost: 5,
 } as const;
 
+export const FROST_LORD_CONFIG = {
+  frostSigilLimit: 4,
+  damagePerSigil: 1,
+  coldWaveMinimumSigils: 3,
+  coldWaveTemporarySigils: 1,
+  blizzardFullReleaseSigils: 4,
+  blizzardTemporarySigils: 2,
+} as const;
+
 export const createInitialFaithState = (): FaithState => ({
   KITCHEN_GOD: { faith: 0, level: 0 },
   DEER_SPIRIT: { faith: 0, level: 0 },

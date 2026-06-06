@@ -10,6 +10,7 @@ import {
   DEITY_ORDER,
   DeityType,
   DEER_SPIRIT_CONFIG,
+  FROST_LORD_CONFIG,
   FaithState,
   KITCHEN_GOD_CONFIG,
   createInitialFaithState,
@@ -234,6 +235,8 @@ export default function App() {
   const [sproutFeedback, setSproutFeedback] = useState<{ success: boolean; token: number } | null>(null);
   const [antlerChargePickerOpen, setAntlerChargePickerOpen] = useState(false);
   const [antlerChargeFeedback, setAntlerChargeFeedback] = useState<{ hpCost: number; damage: number; isSurge: boolean; token: number } | null>(null);
+  const [frostSigilPickerOpen, setFrostSigilPickerOpen] = useState(false);
+  const [frostSigilFeedback, setFrostSigilFeedback] = useState<{ hitIndex: number; totalHits: number; token: number } | null>(null);
   const [glacierRecycleFeedback, setGlacierRecycleFeedback] = useState<{
     targets: Array<'PLAYER' | 'AI'>;
     echoByTarget?: Partial<Record<'PLAYER' | 'AI', boolean>>;
@@ -351,6 +354,8 @@ export default function App() {
     setSproutFeedback(null);
     setAntlerChargeFeedback(null);
     setAntlerChargePickerOpen(false);
+    setFrostSigilFeedback(null);
+    setFrostSigilPickerOpen(false);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
     setScorchFeedback(null);
@@ -378,11 +383,13 @@ export default function App() {
   const [currentChallengeStage, setCurrentChallengeStage] = useState(1);
   const [faithState, setFaithState] = useState<FaithState>(() => createInitialFaithState());
   const [playerDewdrops, setPlayerDewdrops] = useState(0);
+  const [playerFrostSigils, setPlayerFrostSigils] = useState(0);
   const [offeringPickerCardId, setOfferingPickerCardId] = useState<string | null>(null);
   const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
   const [hasUsedDeitySkillThisClash, setHasUsedDeitySkillThisClash] = useState(false);
   const [hasTriggeredCoreCombustionThisEnemy, setHasTriggeredCoreCombustionThisEnemy] = useState(false);
   const [hasTriggeredVerdantSurgeThisEnemy, setHasTriggeredVerdantSurgeThisEnemy] = useState(false);
+  const [hasTriggeredBlizzardThisEnemy, setHasTriggeredBlizzardThisEnemy] = useState(false);
   const [enemyScorchMarks, setEnemyScorchMarks] = useState(0);
   const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'fuel' | 'ember' | 'core' | 'combustion'; damage?: number; coreDamage?: number; token: number } | null>(null);
   const [selectedStageReward, setSelectedStageReward] = useState<StageRewardState>(null);
@@ -401,10 +408,15 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(false);
   const homeLogContainerRef = useRef<HTMLDivElement>(null);
   const playerDewdropsRef = useRef(0);
+  const playerFrostSigilsRef = useRef(0);
 
   useEffect(() => {
     playerDewdropsRef.current = playerDewdrops;
   }, [playerDewdrops]);
+
+  useEffect(() => {
+    playerFrostSigilsRef.current = playerFrostSigils;
+  }, [playerFrostSigils]);
 
   useEffect(() => {
     if (homeLogContainerRef.current) {
@@ -623,11 +635,14 @@ export default function App() {
     setFaithState(createInitialFaithState());
     playerDewdropsRef.current = 0;
     setPlayerDewdrops(0);
+    playerFrostSigilsRef.current = 0;
+    setPlayerFrostSigils(0);
     setOfferingPickerCardId(null);
     setHasOfferedThisClash(false);
     setHasUsedDeitySkillThisClash(false);
     setHasTriggeredCoreCombustionThisEnemy(false);
     setHasTriggeredVerdantSurgeThisEnemy(false);
+    setHasTriggeredBlizzardThisEnemy(false);
     enemyScorchMarksRef.current = 0;
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
@@ -677,6 +692,8 @@ export default function App() {
     setSproutFeedback(null);
     setAntlerChargeFeedback(null);
     setAntlerChargePickerOpen(false);
+    setFrostSigilFeedback(null);
+    setFrostSigilPickerOpen(false);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
     setScorchFeedback(null);
@@ -815,6 +832,7 @@ export default function App() {
     setScorchFeedback(null);
     setHasTriggeredCoreCombustionThisEnemy(false);
     setHasTriggeredVerdantSurgeThisEnemy(false);
+    setHasTriggeredBlizzardThisEnemy(false);
     setState(frozenState);
     setHasUsedDeitySkillThisClash(false);
     setChallengeStageClear({
@@ -906,6 +924,7 @@ export default function App() {
     setHasUsedDeitySkillThisClash(false);
     setHasTriggeredCoreCombustionThisEnemy(false);
     setHasTriggeredVerdantSurgeThisEnemy(false);
+    setHasTriggeredBlizzardThisEnemy(false);
     enemyScorchMarksRef.current = 0;
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
@@ -1167,6 +1186,13 @@ export default function App() {
     const aiGlacierReclaims = glacierReclaims.filter(reclaim => ownerForSide(reclaim.side) === 'AI');
     playerGlacierReclaims.forEach(({ card }) => {
       resultLogs.push(`[冰川回收] ${glacierCardLabel(card.type)}形成平局，返回手牌`);
+      if (gameMode === 'CHALLENGE' && faithState.FROST_LORD.level >= 1) {
+        const before = playerFrostSigilsRef.current;
+        const after = Math.min(FROST_LORD_CONFIG.frostSigilLimit, before + 1);
+        playerFrostSigilsRef.current = after;
+        setPlayerFrostSigils(after);
+        resultLogs.push(`[霜君] 冰川牌平局回收，获得霜签：${before} → ${after}`);
+      }
       if (card.glacierEchoUsed) {
         resultLogs.push('[冰川回收] 该冰川牌已使用过“极寒回响”');
       }
@@ -2021,6 +2047,14 @@ export default function App() {
           const selectedCard = playerEchoCandidates.find(card => card.id === selectedEchoCardId);
           echoLogs.push(`[冰川回收] “${selectedCard ? glacierCardLabel(selectedCard.type) : '冰川牌'}”保留异变属性`);
           echoLogs.push(`[冰川回收] “${selectedCard ? glacierCardLabel(selectedCard.type) : '冰川牌'}”已使用极寒回响次数：1 / 1`);
+          if (gameMode === 'CHALLENGE' && faithState.FROST_LORD.level >= 2) {
+            const before = playerFrostSigilsRef.current;
+            const after = Math.min(FROST_LORD_CONFIG.frostSigilLimit, before + 1);
+            playerFrostSigilsRef.current = after;
+            setPlayerFrostSigils(after);
+            echoLogs.push('[霜君] 触发“连雪”');
+            echoLogs.push(`[霜君] 极寒回响额外获得霜签：${before} → ${after}`);
+          }
         }
 
         playerReturnCards
@@ -2096,7 +2130,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentAiMaxHP, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.DEER_SPIRIT.level, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
+  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentAiMaxHP, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.DEER_SPIRIT.level, faithState.FROST_LORD.level, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -2686,6 +2720,117 @@ export default function App() {
     }
   };
 
+  const releaseFrostSigils = (sigilsToRelease: number) => {
+    if (gameMode !== 'CHALLENGE' || faithState.FROST_LORD.level < 1) return;
+    if (!isPlayerTurnState || isProcessing || state.winner || challengeStageClear) {
+      showShortNotice('当前阶段不能释放神明技能');
+      return;
+    }
+    if (hasUsedDeitySkillThisClash) {
+      showShortNotice('本轮已经释放神明技能');
+      return;
+    }
+    const availableSigils = playerFrostSigilsRef.current;
+    if (sigilsToRelease < 1 || sigilsToRelease > availableSigils) {
+      showShortNotice('请选择当前拥有的霜签数量');
+      return;
+    }
+
+    const triggersColdWave = faithState.FROST_LORD.level >= 3
+      && sigilsToRelease >= FROST_LORD_CONFIG.coldWaveMinimumSigils;
+    const triggersBlizzard = faithState.FROST_LORD.level >= 4
+      && !hasTriggeredBlizzardThisEnemy
+      && sigilsToRelease === FROST_LORD_CONFIG.blizzardFullReleaseSigils;
+    const temporarySigils = (triggersColdWave ? FROST_LORD_CONFIG.coldWaveTemporarySigils : 0)
+      + (triggersBlizzard ? FROST_LORD_CONFIG.blizzardTemporarySigils : 0);
+    const totalHits = sigilsToRelease + temporarySigils;
+    const totalDamage = totalHits * FROST_LORD_CONFIG.damagePerSigil;
+    const snapshot = stateRef.current;
+    const nextAiHP = Math.max(0, snapshot.aiHP - totalDamage);
+    const nextSigils = availableSigils - sigilsToRelease;
+    const nextState: GameState = {
+      ...snapshot,
+      aiHP: nextAiHP,
+    };
+
+    playerFrostSigilsRef.current = nextSigils;
+    setPlayerFrostSigils(nextSigils);
+    setHasUsedDeitySkillThisClash(true);
+    if (triggersBlizzard) {
+      setHasTriggeredBlizzardThisEnemy(true);
+    }
+    setFrostSigilPickerOpen(false);
+    setSelectedCards([]);
+    setIsProcessing(true);
+    setAiHPShake(true);
+    setAiHPFlash(true);
+    stateRef.current = nextState;
+    setState(nextState);
+    setLogs(prev => [
+      ...prev,
+      `[霜君] 释放 ${sigilsToRelease} 枚霜签`,
+      ...(triggersColdWave
+        ? ['[霜君] 触发“寒潮”', '[神明伤害] 追加 1 枚临时霜签']
+        : []),
+      ...(triggersBlizzard
+        ? ['[霜君] 触发“暴雪”', '[神明伤害] 追加 2 枚临时霜签']
+        : []),
+      `[神明伤害] 霜签连续造成 ${totalHits} 点伤害`,
+    ]);
+
+    for (let hitIndex = 1; hitIndex <= totalHits; hitIndex += 1) {
+      scheduleSettlementTimer(() => {
+        setFrostSigilFeedback({ hitIndex, totalHits, token: Date.now() + hitIndex });
+      }, (hitIndex - 1) * 150);
+    }
+
+    scheduleSettlementTimer(() => {
+      setAiHPShake(false);
+      setAiHPFlash(false);
+      setFrostSigilFeedback(null);
+      if (nextAiHP <= 0) {
+        setLogs(prev => [...prev, '[挑战模式] 当前对手已被霜签击败']);
+        if (currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages) {
+          enterChallengeStageClear(stateRef.current);
+          return;
+        }
+
+        invalidateBattleSession();
+        battleFrozenRef.current = true;
+        clearPendingBattleTimers();
+        enemyScorchMarksRef.current = 0;
+        setEnemyScorchMarks(0);
+        setScorchFeedback(null);
+        setHasTriggeredCoreCombustionThisEnemy(false);
+        setHasTriggeredVerdantSurgeThisEnemy(false);
+        setHasTriggeredBlizzardThisEnemy(false);
+        setState(prev => {
+          const finalState: GameState = {
+            ...prev,
+            aiHP: 0,
+            phase: 'GAME_OVER',
+            homePlayed: [],
+            guestPlayed: [],
+            winner: 'PLAYER',
+          };
+          stateRef.current = finalState;
+          return finalState;
+        });
+        setLogs(prev => [
+          ...prev,
+          `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+          '[挑战模式] 挑战通关',
+        ]);
+        setIsProcessing(false);
+        setSettlementSubPhase(null);
+        setClashResult(null);
+        return;
+      }
+
+      setIsProcessing(false);
+    }, Math.max(760, totalHits * 150 + 260));
+  };
+
   const onPlay = () => {
     if (isProcessing || state.winner) return;
 
@@ -2848,6 +2993,20 @@ export default function App() {
       setAntlerChargePickerOpen(false);
     }
   }, [antlerChargeDisabledReason, canShowAntlerChargeAction]);
+  const canShowFrostSigilAction = gameMode === 'CHALLENGE'
+    && faithState.FROST_LORD.level >= 1
+    && isPlayerTurnState
+    && !isRerollMode;
+  const frostSigilDisabledReason = hasUsedDeitySkillThisClash
+    ? '本轮已经释放神明技能'
+    : playerFrostSigils <= 0
+      ? '当前没有霜签'
+      : null;
+  useEffect(() => {
+    if (!canShowFrostSigilAction || frostSigilDisabledReason) {
+      setFrostSigilPickerOpen(false);
+    }
+  }, [canShowFrostSigilAction, frostSigilDisabledReason]);
   const hasRecoverableDiscardPile = state.playerDiscardPile.length + state.aiDiscardPile.length + state.playerOfferingPile.length > 0;
   const isSharedDeckUnavailable = state.drawPile.length === 0 && !hasRecoverableDiscardPile;
   const showResonancePreview = selectedVolcanoCards.length >= 2 && !isRerollMode && isPlayerTurnState;
@@ -4221,6 +4380,7 @@ export default function App() {
                   const faith = faithState[deityType];
                   const nextThreshold = getNextFaithThreshold(faith.level);
                   const showDewdrops = deityType === 'DEER_SPIRIT';
+                  const showFrostSigils = deityType === 'FROST_LORD';
                   return (
                     <div key={deity.id} className="rounded-md border border-white/8 bg-black/20 px-1.5 py-1 text-center">
                       <div className="text-[10px] font-black tracking-wider text-white/85">{deity.icon} {deity.name}</div>
@@ -4239,6 +4399,18 @@ export default function App() {
                           {faith.level >= 4 && (
                             <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/50">
                               万木奔涌：{hasTriggeredVerdantSurgeThisEnemy ? '本关已触发' : '本关就绪'}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {showFrostSigils && (
+                        <>
+                          <div className="mt-0.5 text-[8px] font-semibold text-cyan-100/60">
+                            ❄️ 霜签：{faith.level >= 1 ? `${playerFrostSigils} / ${FROST_LORD_CONFIG.frostSigilLimit}` : '未解锁'}
+                          </div>
+                          {faith.level >= 4 && (
+                            <div className="mt-0.5 text-[8px] font-semibold text-cyan-100/50">
+                              ❄️ 暴雪：{hasTriggeredBlizzardThisEnemy ? '本关已触发' : '本关就绪'}
                             </div>
                           )}
                         </>
@@ -4509,6 +4681,66 @@ export default function App() {
               </div>
             )}
 
+            {canShowFrostSigilAction && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (frostSigilDisabledReason) {
+                      showShortNotice(frostSigilDisabledReason);
+                      return;
+                    }
+                    setFrostSigilPickerOpen(prev => !prev);
+                  }}
+                  title={frostSigilDisabledReason ?? undefined}
+                  aria-disabled={Boolean(frostSigilDisabledReason)}
+                  className={`w-[128px] h-[40px] rounded-lg border font-black tracking-wider transition-all duration-200 active:scale-95
+                    ${frostSigilDisabledReason
+                      ? 'border-zinc-700/45 bg-zinc-900/45 text-text-dim/35 cursor-pointer hover:border-cyan-400/20'
+                      : 'border-cyan-300/40 bg-[#061521]/88 text-cyan-100 shadow-lg shadow-cyan-500/10 hover:bg-[#082134]'
+                    }
+                  `}
+                >
+                  ❄️ 释放霜签
+                </button>
+                <AnimatePresence>
+                  {frostSigilPickerOpen && !frostSigilDisabledReason && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 4, scale: 0.96 }}
+                      transition={{ duration: 0.16 }}
+                      className="absolute bottom-[48px] left-1/2 z-[94] w-[236px] -translate-x-1/2 rounded-lg border border-cyan-300/25 bg-[#061521]/96 p-2 text-center font-mono shadow-[0_0_22px_rgba(34,211,238,0.18)]"
+                    >
+                      <div className="text-[10px] font-black tracking-widest text-cyan-100/80">❄️ 选择释放数量</div>
+                      <div className="mt-2 grid grid-cols-4 gap-1.5">
+                        {Array.from({ length: FROST_LORD_CONFIG.frostSigilLimit }, (_, index) => index + 1).map(amount => {
+                          const disabled = amount > playerFrostSigils;
+                          return (
+                            <button
+                              key={amount}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => releaseFrostSigils(amount)}
+                              className={`rounded-md border px-1 py-1.5 text-[9px] font-black leading-tight transition-all
+                                ${disabled
+                                  ? 'border-zinc-700/35 bg-zinc-900/35 text-text-dim/30 cursor-not-allowed'
+                                  : 'border-cyan-300/35 bg-cyan-950/28 text-cyan-50 hover:bg-cyan-900/35'
+                                }
+                              `}
+                            >
+                              <div>释放 {amount} 枚</div>
+                              <div className="mt-1 text-[8px] text-cyan-100/65">伤害 {amount}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
             {/* BUTTON 2: RIGHT BUTTON */}
             {isRerollMode ? (
               <button 
@@ -4671,6 +4903,23 @@ export default function App() {
             <div className="text-[13px] font-black tracking-widest">🌿 {antlerChargeFeedback.isSurge ? '万木奔涌' : '鹿角奔袭'}</div>
             <div className="mt-1 text-[10px] font-bold text-emerald-100/75">生命转化：{antlerChargeFeedback.hpCost}</div>
             <div className="text-[10px] font-bold text-emerald-100/75">造成伤害：{antlerChargeFeedback.damage}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {frostSigilFeedback && (
+          <motion.div
+            key={`frost-sigil-hit-${frostSigilFeedback.token}`}
+            initial={{ opacity: 0, y: 8, scale: 0.9 }}
+            animate={{ opacity: [0, 1, 1, 0], y: [8, -2, -18, -30], scale: [0.9, 1.08, 1, 0.96] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.46, ease: 'easeOut' }}
+            className="absolute left-1/2 top-[286px] z-[120] -translate-x-1/2 rounded-lg border border-cyan-300/40 bg-[#061521]/94 px-4 py-2 text-center font-mono text-cyan-100 shadow-[0_0_30px_rgba(34,211,238,0.22)] pointer-events-none"
+          >
+            <div className="text-[13px] font-black tracking-widest">❄️ 霜签</div>
+            <div className="mt-1 text-[16px] font-black text-cyan-100">-1</div>
+            <div className="text-[8px] font-semibold text-cyan-100/55">{frostSigilFeedback.hitIndex} / {frostSigilFeedback.totalHits}</div>
           </motion.div>
         )}
       </AnimatePresence>

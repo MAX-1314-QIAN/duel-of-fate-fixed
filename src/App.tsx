@@ -372,7 +372,7 @@ export default function App() {
   const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
   const [hasUsedDeitySkillThisClash, setHasUsedDeitySkillThisClash] = useState(false);
   const [enemyScorchMarks, setEnemyScorchMarks] = useState(0);
-  const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'fuel' | 'combustion'; damage?: number; token: number } | null>(null);
+  const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'fuel' | 'ember' | 'combustion'; damage?: number; token: number } | null>(null);
   const [selectedStageReward, setSelectedStageReward] = useState<StageRewardState>(null);
   const [challengeStageClear, setChallengeStageClear] = useState<{
     completedStage: number;
@@ -2344,13 +2344,14 @@ export default function App() {
     const damage = scorchBefore;
     const snapshot = stateRef.current;
     const nextAiHP = Math.max(0, snapshot.aiHP - damage);
+    const retainedScorchMarks = faithState.KITCHEN_GOD.level >= 3 && nextAiHP > 0 ? 1 : 0;
     const nextState: GameState = {
       ...snapshot,
       aiHP: nextAiHP,
     };
 
-    enemyScorchMarksRef.current = 0;
-    setEnemyScorchMarks(0);
+    enemyScorchMarksRef.current = retainedScorchMarks;
+    setEnemyScorchMarks(retainedScorchMarks);
     setHasUsedDeitySkillThisClash(true);
     setIsProcessing(true);
     setScorchFeedback({ type: 'combustion', damage, token: Date.now() });
@@ -2361,8 +2362,15 @@ export default function App() {
     setLogs(prev => [
       ...prev,
       '[灶神] 释放“爆燃”',
-      `[灶神] 消耗灼痕：${scorchBefore} → 0`,
+      `[灶神] 消耗灼痕：${scorchBefore} → ${retainedScorchMarks}`,
       `[神明伤害] 爆燃造成 ${damage} 点伤害`,
+      ...(retainedScorchMarks > 0
+        ? [
+            '[灶神] 触发“余火”',
+            '[灶神] 爆燃后保留 1 层灼痕',
+            `[灶神] 敌方灼痕：${scorchBefore} → 1`,
+          ]
+        : []),
     ]);
 
     scheduleSettlementTimer(() => {
@@ -2370,9 +2378,17 @@ export default function App() {
       setAiHPFlash(false);
     }, 520);
 
+    if (retainedScorchMarks > 0) {
+      scheduleSettlementTimer(() => {
+        setScorchFeedback({ type: 'ember', token: Date.now() });
+      }, 620);
+    }
+
     scheduleSettlementTimer(() => {
       setScorchFeedback(null);
       if (nextAiHP <= 0) {
+        enemyScorchMarksRef.current = 0;
+        setEnemyScorchMarks(0);
         setLogs(prev => [...prev, '[挑战模式] 当前对手已被爆燃击败']);
         if (currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages) {
           enterChallengeStageClear(stateRef.current);
@@ -3069,10 +3085,13 @@ export default function App() {
                 className="absolute right-4 top-[58px] z-[92] rounded-lg border border-orange-400/40 bg-[#1a0904]/92 px-3 py-2 text-center font-mono text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.28)] pointer-events-none"
               >
                 <div className="text-[12px] font-black tracking-widest">
-                  🔥 {scorchFeedback.type === 'combustion' ? '爆燃' : scorchFeedback.type === 'fuel' ? '添薪' : '灼痕 +1'}
+                  🔥 {scorchFeedback.type === 'combustion' ? '爆燃' : scorchFeedback.type === 'fuel' ? '添薪' : scorchFeedback.type === 'ember' ? '余火未熄' : '灼痕 +1'}
                 </div>
                 {scorchFeedback.type === 'fuel' && (
                   <div className="mt-1 text-[10px] font-bold text-orange-100/75">灼痕额外 +1</div>
+                )}
+                {scorchFeedback.type === 'ember' && (
+                  <div className="mt-1 text-[10px] font-bold text-orange-100/75">保留 1 层灼痕</div>
                 )}
                 {scorchFeedback.type === 'combustion' && (
                   <div className="mt-1 text-[10px] font-bold text-orange-100/75">额外伤害：{scorchFeedback.damage}</div>

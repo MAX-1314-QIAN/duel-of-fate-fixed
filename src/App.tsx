@@ -371,8 +371,9 @@ export default function App() {
   const [offeringPickerCardId, setOfferingPickerCardId] = useState<string | null>(null);
   const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
   const [hasUsedDeitySkillThisClash, setHasUsedDeitySkillThisClash] = useState(false);
+  const [hasTriggeredCoreCombustionThisEnemy, setHasTriggeredCoreCombustionThisEnemy] = useState(false);
   const [enemyScorchMarks, setEnemyScorchMarks] = useState(0);
-  const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'fuel' | 'ember' | 'combustion'; damage?: number; token: number } | null>(null);
+  const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'fuel' | 'ember' | 'core' | 'combustion'; damage?: number; coreDamage?: number; token: number } | null>(null);
   const [selectedStageReward, setSelectedStageReward] = useState<StageRewardState>(null);
   const [challengeStageClear, setChallengeStageClear] = useState<{
     completedStage: number;
@@ -606,6 +607,7 @@ export default function App() {
     setOfferingPickerCardId(null);
     setHasOfferedThisClash(false);
     setHasUsedDeitySkillThisClash(false);
+    setHasTriggeredCoreCombustionThisEnemy(false);
     enemyScorchMarksRef.current = 0;
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
@@ -784,6 +786,7 @@ export default function App() {
     enemyScorchMarksRef.current = 0;
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
+    setHasTriggeredCoreCombustionThisEnemy(false);
     setState(frozenState);
     setHasUsedDeitySkillThisClash(false);
     setChallengeStageClear({
@@ -871,6 +874,7 @@ export default function App() {
     setSelectedCards([]);
     setHasOfferedThisClash(false);
     setHasUsedDeitySkillThisClash(false);
+    setHasTriggeredCoreCombustionThisEnemy(false);
     enemyScorchMarksRef.current = 0;
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
@@ -1794,6 +1798,7 @@ export default function App() {
         enemyScorchMarksRef.current = 0;
         setEnemyScorchMarks(0);
         setScorchFeedback(null);
+        setHasTriggeredCoreCombustionThisEnemy(false);
         setState(prev => ({
           ...prev,
           playerHP: resolvedPlayerHP,
@@ -2341,7 +2346,11 @@ export default function App() {
       return;
     }
 
-    const damage = scorchBefore;
+    const baseDamage = scorchBefore;
+    const coreDamage = faithState.KITCHEN_GOD.level >= 4 && !hasTriggeredCoreCombustionThisEnemy
+      ? KITCHEN_GOD_CONFIG.coreCombustionBonusDamage
+      : 0;
+    const damage = baseDamage + coreDamage;
     const snapshot = stateRef.current;
     const nextAiHP = Math.max(0, snapshot.aiHP - damage);
     const retainedScorchMarks = faithState.KITCHEN_GOD.level >= 3 && nextAiHP > 0 ? 1 : 0;
@@ -2353,8 +2362,11 @@ export default function App() {
     enemyScorchMarksRef.current = retainedScorchMarks;
     setEnemyScorchMarks(retainedScorchMarks);
     setHasUsedDeitySkillThisClash(true);
+    if (coreDamage > 0) {
+      setHasTriggeredCoreCombustionThisEnemy(true);
+    }
     setIsProcessing(true);
-    setScorchFeedback({ type: 'combustion', damage, token: Date.now() });
+    setScorchFeedback({ type: coreDamage > 0 ? 'core' : 'combustion', damage: baseDamage, coreDamage, token: Date.now() });
     setAiHPShake(true);
     setAiHPFlash(true);
     stateRef.current = nextState;
@@ -2362,8 +2374,14 @@ export default function App() {
     setLogs(prev => [
       ...prev,
       '[灶神] 释放“爆燃”',
+      `[神明伤害] 基础爆燃造成 ${baseDamage} 点伤害`,
+      ...(coreDamage > 0
+        ? [
+            '[灶神] 触发“炉心爆燃”',
+            `[神明伤害] 炉心爆燃追加 ${coreDamage} 点伤害`,
+          ]
+        : []),
       `[灶神] 消耗灼痕：${scorchBefore} → ${retainedScorchMarks}`,
-      `[神明伤害] 爆燃造成 ${damage} 点伤害`,
       ...(retainedScorchMarks > 0
         ? [
             '[灶神] 触发“余火”',
@@ -2378,10 +2396,13 @@ export default function App() {
       setAiHPFlash(false);
     }, 520);
 
+    const feedbackDuration = coreDamage > 0 ? 1180 : 820;
+    const emberFeedbackDelay = coreDamage > 0 ? 920 : 620;
+
     if (retainedScorchMarks > 0) {
       scheduleSettlementTimer(() => {
         setScorchFeedback({ type: 'ember', token: Date.now() });
-      }, 620);
+      }, emberFeedbackDelay);
     }
 
     scheduleSettlementTimer(() => {
@@ -2389,7 +2410,7 @@ export default function App() {
       if (nextAiHP <= 0) {
         enemyScorchMarksRef.current = 0;
         setEnemyScorchMarks(0);
-        setLogs(prev => [...prev, '[挑战模式] 当前对手已被爆燃击败']);
+        setLogs(prev => [...prev, coreDamage > 0 ? '[挑战模式] 当前对手已被炉心爆燃击败' : '[挑战模式] 当前对手已被爆燃击败']);
         if (currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages) {
           enterChallengeStageClear(stateRef.current);
           return;
@@ -2422,7 +2443,7 @@ export default function App() {
       }
 
       setIsProcessing(false);
-    }, 820);
+    }, feedbackDuration);
   };
 
   const onPlay = () => {
@@ -3056,6 +3077,14 @@ export default function App() {
               <div className="text-[10px] font-extrabold text-orange-100/80">
                 {enemyScorchMarks} / {KITCHEN_GOD_CONFIG.scorchMarkLimit}
               </div>
+              {faithState.KITCHEN_GOD.level >= 4 && (
+                <div className="mt-1 border-t border-orange-300/15 pt-1 text-[8px] font-black tracking-widest text-orange-100/55">
+                  <div>🔥 炉心爆燃</div>
+                  <div className={hasTriggeredCoreCombustionThisEnemy ? 'text-orange-100/45' : 'text-amber-200/85'}>
+                    {hasTriggeredCoreCombustionThisEnemy ? '本关已触发' : '就绪'}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <AnimatePresence>
@@ -3081,11 +3110,11 @@ export default function App() {
                 initial={{ opacity: 0, y: 4, scale: 0.86 }}
                 animate={{ opacity: [0, 1, 1, 0], y: [4, -8, -18, -28], scale: [0.86, 1.08, 1, 0.96] }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: scorchFeedback.type === 'combustion' ? 0.95 : 0.72, ease: 'easeOut' }}
+                transition={{ duration: scorchFeedback.type === 'core' ? 1.15 : scorchFeedback.type === 'combustion' ? 0.95 : 0.72, ease: 'easeOut' }}
                 className="absolute right-4 top-[58px] z-[92] rounded-lg border border-orange-400/40 bg-[#1a0904]/92 px-3 py-2 text-center font-mono text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.28)] pointer-events-none"
               >
                 <div className="text-[12px] font-black tracking-widest">
-                  🔥 {scorchFeedback.type === 'combustion' ? '爆燃' : scorchFeedback.type === 'fuel' ? '添薪' : scorchFeedback.type === 'ember' ? '余火未熄' : '灼痕 +1'}
+                  🔥 {scorchFeedback.type === 'core' ? '炉心爆燃' : scorchFeedback.type === 'combustion' ? '爆燃' : scorchFeedback.type === 'fuel' ? '添薪' : scorchFeedback.type === 'ember' ? '余火未熄' : '灼痕 +1'}
                 </div>
                 {scorchFeedback.type === 'fuel' && (
                   <div className="mt-1 text-[10px] font-bold text-orange-100/75">灼痕额外 +1</div>
@@ -3095,6 +3124,12 @@ export default function App() {
                 )}
                 {scorchFeedback.type === 'combustion' && (
                   <div className="mt-1 text-[10px] font-bold text-orange-100/75">额外伤害：{scorchFeedback.damage}</div>
+                )}
+                {scorchFeedback.type === 'core' && (
+                  <div className="mt-1 space-y-0.5 text-[10px] font-bold text-orange-100/75">
+                    <div>基础爆燃：{scorchFeedback.damage}</div>
+                    <div className="text-amber-200/85">炉心追加：{scorchFeedback.coreDamage}</div>
+                  </div>
                 )}
               </motion.div>
             )}

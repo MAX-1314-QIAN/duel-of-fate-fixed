@@ -372,7 +372,7 @@ export default function App() {
   const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
   const [hasUsedDeitySkillThisClash, setHasUsedDeitySkillThisClash] = useState(false);
   const [enemyScorchMarks, setEnemyScorchMarks] = useState(0);
-  const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'combustion'; damage?: number; token: number } | null>(null);
+  const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'fuel' | 'combustion'; damage?: number; token: number } | null>(null);
   const [selectedStageReward, setSelectedStageReward] = useState<StageRewardState>(null);
   const [challengeStageClear, setChallengeStageClear] = useState<{
     completedStage: number;
@@ -1188,6 +1188,9 @@ export default function App() {
     const playerSuccessfulVolcanoHits = playerRoleAtClash === 'HOME'
       ? finalHomeAttack.filter(card => card.mutationType === 'VOLCANO').length
       : guestDamagingCards.filter(card => card.mutationType === 'VOLCANO').length;
+    const playerTriggeredVolcanoResonance = playerRoleAtClash === 'HOME'
+      ? homeResonanceBonus > 0
+      : guestResonanceBonus > 0;
     const homeInitialHP = playerRoleAtClash === 'HOME' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
     const guestInitialHP = playerRoleAtClash === 'GUEST' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
     const homeHpAfterDamage = Math.max(0, homeInitialHP - hDamage);
@@ -1301,21 +1304,40 @@ export default function App() {
       resultLogs.push('[环境事件] 下一次森林感染倒计时减少 1 轮');
       pulseMutationEvent();
     }
-    if (gameMode === 'CHALLENGE' && faithState.KITCHEN_GOD.level >= 1 && playerSuccessfulVolcanoHits > 0) {
+    if (
+      gameMode === 'CHALLENGE'
+      && faithState.KITCHEN_GOD.level >= 1
+      && (
+        playerSuccessfulVolcanoHits > 0
+        || (faithState.KITCHEN_GOD.level >= 2 && playerTriggeredVolcanoResonance)
+      )
+    ) {
       const scorchBefore = enemyScorchMarksRef.current;
-      const scorchAfter = Math.min(
+      let scorchAfter = Math.min(
         KITCHEN_GOD_CONFIG.scorchMarkLimit,
         scorchBefore + playerSuccessfulVolcanoHits
       );
-      if (scorchAfter > scorchBefore) {
+      const baseScorchAfter = scorchAfter;
+      const triggeredFuel = faithState.KITCHEN_GOD.level >= 2 && playerTriggeredVolcanoResonance;
+      if (playerSuccessfulVolcanoHits > 0 && baseScorchAfter > scorchBefore) {
+        resultLogs.push(`[灶神] 火山异变牌命中，敌方灼痕：${scorchBefore} → ${baseScorchAfter}`);
+      }
+      if (triggeredFuel) {
+        const fuelBefore = scorchAfter;
+        const fuelAfter = Math.min(KITCHEN_GOD_CONFIG.scorchMarkLimit, fuelBefore + 1);
+        scorchAfter = fuelAfter;
+        resultLogs.push('[灶神] 触发“添薪”');
+        resultLogs.push('[灶神] 灼烧共鸣额外增加 1 层灼痕');
+        resultLogs.push(`[灶神] 敌方灼痕：${fuelBefore} → ${fuelAfter}`);
+      }
+      if (scorchAfter !== scorchBefore) {
         enemyScorchMarksRef.current = scorchAfter;
         setEnemyScorchMarks(scorchAfter);
-        setScorchFeedback({ type: 'mark', token: Date.now() });
-        scheduleSettlementTimer(() => {
-          setScorchFeedback(null);
-        }, 760);
-        resultLogs.push(`[灶神] 火山异变牌命中，敌方灼痕：${scorchBefore} → ${scorchAfter}`);
       }
+      setScorchFeedback({ type: triggeredFuel ? 'fuel' : 'mark', token: Date.now() });
+      scheduleSettlementTimer(() => {
+        setScorchFeedback(null);
+      }, 760);
     }
     if (homeResonanceBonus > 0 || guestResonanceBonus > 0) {
       const burnTargets = [
@@ -3046,7 +3068,12 @@ export default function App() {
                 transition={{ duration: scorchFeedback.type === 'combustion' ? 0.95 : 0.72, ease: 'easeOut' }}
                 className="absolute right-4 top-[58px] z-[92] rounded-lg border border-orange-400/40 bg-[#1a0904]/92 px-3 py-2 text-center font-mono text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.28)] pointer-events-none"
               >
-                <div className="text-[12px] font-black tracking-widest">🔥 {scorchFeedback.type === 'combustion' ? '爆燃' : '灼痕 +1'}</div>
+                <div className="text-[12px] font-black tracking-widest">
+                  🔥 {scorchFeedback.type === 'combustion' ? '爆燃' : scorchFeedback.type === 'fuel' ? '添薪' : '灼痕 +1'}
+                </div>
+                {scorchFeedback.type === 'fuel' && (
+                  <div className="mt-1 text-[10px] font-bold text-orange-100/75">灼痕额外 +1</div>
+                )}
                 {scorchFeedback.type === 'combustion' && (
                   <div className="mt-1 text-[10px] font-bold text-orange-100/75">额外伤害：{scorchFeedback.damage}</div>
                 )}

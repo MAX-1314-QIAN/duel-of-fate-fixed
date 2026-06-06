@@ -34,7 +34,7 @@ import {
   removeMutationFromCard,
   selectAiMutationCandidate,
 } from './game/environment';
-import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode, getChallengeAiStageConfig } from './game/mode';
+import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode, getChallengeAiStageConfig, getChallengeStageConfig } from './game/mode';
 
 const INITIAL_HP = 10;
 const MAX_HAND = 4;
@@ -590,10 +590,11 @@ export default function App() {
     clearTransientBattleVisuals();
     const modeConfig = GAME_MODE_CONFIG[mode];
     const initialEnvironment = modeConfig.environmentRoute[0];
+    const initialAiHP = mode === 'CHALLENGE' ? getChallengeStageConfig(1).aiHp : INITIAL_HP;
     const newDeck = createDeck();
     const nextState: GameState = {
       playerHP: INITIAL_HP,
-      aiHP: INITIAL_HP,
+      aiHP: initialAiHP,
       playerHand: newDeck.slice(0, 4),
       aiHand: newDeck.slice(4, 8),
       playerRole: 'HOME',
@@ -689,6 +690,7 @@ export default function App() {
           zhCN.logs.reset,
           `[模式] 当前模式：${modeConfig.name}`,
           `[挑战模式] 进入第 1 / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
+          `[对手] 当前生命：${initialAiHP} / ${initialAiHP}`,
           `[对手] 当前 AI 类型：${getChallengeAiStageConfig(1).name}`,
           '[环境路线] 火山 → 森林 → 冰川',
           `[环境路线] 当前环境：${environmentLabel(initialEnvironment)}`,
@@ -718,6 +720,8 @@ export default function App() {
   }, [scheduleSettlementTimer]);
 
   const currentModeConfig = GAME_MODE_CONFIG[gameMode];
+  const currentChallengeStageConfig = getChallengeStageConfig(currentChallengeStage);
+  const currentAiMaxHP = gameMode === 'CHALLENGE' ? currentChallengeStageConfig.aiHp : INITIAL_HP;
   const currentEnvironmentRoute = currentModeConfig.environmentRoute;
   const mutationLimit = currentModeConfig.mutationLimit;
   const mutationIntervalRounds = currentModeConfig.mutationIntervalRounds;
@@ -867,16 +871,18 @@ export default function App() {
     }
     const nextDrawPile = deckSnapshot.drawPile;
     const nextStage = challengeStageClear.nextStage;
+    const nextStageConfig = getChallengeStageConfig(nextStage);
+    const nextAiHP = nextStageConfig.aiHp;
     const nextState: GameState = {
       ...deckSnapshot,
-      aiHP: INITIAL_HP,
+      aiHP: nextAiHP,
       aiHand: nextAiHand,
       drawPile: nextDrawPile,
       homePlayed: [],
       guestPlayed: [],
       winner: null,
       phase: snapshot.playerRole === 'HOME' ? 'PLAYER_ATTACK' : 'AI_ATTACK',
-      lastAction: `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关\n[对手] 新的对手已进入战场\n[对手] 初始抽取 4 张卡牌`,
+      lastAction: `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关\n[对手] 当前生命：${nextAiHP} / ${nextAiHP}\n[对手] 新的对手已进入战场\n[对手] 初始抽取 4 张卡牌`,
     };
 
     stateRef.current = nextState;
@@ -902,6 +908,7 @@ export default function App() {
       ...prev,
       `[公共牌库] 新关卡剩余卡牌数量：${nextDrawPile.length}`,
       `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
+      `[对手] 当前生命：${nextAiHP} / ${nextAiHP}`,
       `[对手] 当前 AI 类型：${getChallengeAiStageConfig(nextStage).name}`,
       '[对手] 新的对手已进入战场',
       '[对手] 初始抽取 4 张卡牌',
@@ -1209,6 +1216,8 @@ export default function App() {
       : guestResonanceBonus > 0;
     const homeInitialHP = playerRoleAtClash === 'HOME' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
     const guestInitialHP = playerRoleAtClash === 'GUEST' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
+    const homeMaxHP = playerRoleAtClash === 'HOME' ? INITIAL_HP : currentAiMaxHP;
+    const guestMaxHP = playerRoleAtClash === 'GUEST' ? INITIAL_HP : currentAiMaxHP;
     const homeHpAfterDamage = Math.max(0, homeInitialHP - hDamage);
     const guestHpAfterDamage = Math.max(0, guestInitialHP - gDamage);
     const homeMatureForestHits = finalHomeAttack.filter(isMatureForestCard).length;
@@ -1228,7 +1237,7 @@ export default function App() {
         ? homePlayedMatureForestCards
         : Math.min(homePlayedMatureForestCards, 1),
       currentHp: homeHpAfterDamage,
-      maxHp: INITIAL_HP,
+      maxHp: homeMaxHP,
     });
     const guestForestRecovery = calculateForestRecovery({
       successfulMatureForestHits: guestMatureForestHits,
@@ -1236,7 +1245,7 @@ export default function App() {
         ? guestPlayedMatureForestCards
         : Math.min(guestPlayedMatureForestCards, 1),
       currentHp: guestHpAfterDamage,
-      maxHp: INITIAL_HP,
+      maxHp: guestMaxHP,
     });
     const playerForestRecovery = playerRoleAtClash === 'HOME'
       ? homeForestRecovery.finalRecovery
@@ -1252,7 +1261,7 @@ export default function App() {
     const playerHpAfterDamage = Math.max(0, clashSnapshot.playerHP - playerDamage);
     const aiHpAfterDamage = Math.max(0, clashSnapshot.aiHP - aiDamage);
     const resolvedPlayerHP = Math.min(INITIAL_HP, playerHpAfterDamage + playerForestRecovery);
-    const resolvedAiHP = Math.min(INITIAL_HP, aiHpAfterDamage + aiForestRecovery);
+    const resolvedAiHP = Math.min(currentAiMaxHP, aiHpAfterDamage + aiForestRecovery);
     const canGenerateDewdrops =
       gameMode === 'CHALLENGE'
       && faithState.DEER_SPIRIT.level >= 1
@@ -2032,7 +2041,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.DEER_SPIRIT.level, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
+  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentAiMaxHP, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.DEER_SPIRIT.level, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -3130,13 +3139,13 @@ export default function App() {
           <div className="w-full h-3 bg-[#222] rounded-full overflow-hidden border border-[#333]">
             <motion.div 
               initial={false}
-              animate={{ width: `${(state.aiHP / INITIAL_HP) * 100}%` }}
+              animate={{ width: `${(state.aiHP / currentAiMaxHP) * 100}%` }}
               className="h-full hp-bar-gradient-ai"
             />
           </div>
           <div className="flex justify-between mt-1 items-center font-mono opacity-80">
             <span className="text-sm">
-              {state.aiHP}/{INITIAL_HP}
+              {state.aiHP}/{currentAiMaxHP}
               {forestRecoveryFeedback?.recoveryByTarget.AI ? (
                 <span className="ml-2 text-[11px] font-black text-emerald-300 drop-shadow-[0_0_7px_rgba(52,211,153,0.55)]">+{forestRecoveryFeedback.recoveryByTarget.AI}</span>
               ) : null}

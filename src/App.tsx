@@ -2716,7 +2716,7 @@ export default function App() {
   }
 
   return (
-    <div className="w-[1024px] h-[768px] mx-auto bg-bg text-text-main flex flex-col font-sans border border-border overflow-hidden relative shadow-2xl">
+    <div className="w-full max-w-[1600px] h-screen min-h-[720px] mx-auto bg-bg text-text-main flex flex-col font-sans border border-border overflow-hidden relative shadow-2xl">
       {/* Header */}
       <div className="h-20 px-10 flex items-center justify-between border-b border-border bg-surface/80 backdrop-blur-md z-20">
         <div className={`relative w-[300px] p-1 rounded-lg transition-all duration-350 border border-transparent ${playerHPShake ? 'animate-hp-shake' : ''} ${burnFeedback?.targets.includes('PLAYER') ? 'burn-hp-feedback animate-burn-hp-shake' : ''} ${forestRecoveryFeedback?.recoveryByTarget.PLAYER ? 'forest-recovery-hp-feedback' : ''} ${playerHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
@@ -2851,10 +2851,10 @@ export default function App() {
       </div>
 
       {/* Main Arena */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-10 relative">
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 relative">
 
         {/* AI Cards Back (Visual only) */}
-        <div className="absolute top-6 right-10 flex gap-2 min-h-[56px] items-center">
+        <div className="absolute top-5 right-10 flex gap-2 min-h-[56px] items-center">
           {state.aiHand.length === 0 ? (
             <div className="flex flex-col items-end justify-center font-mono opacity-80 text-right leading-tight border border-red-500/25 px-3 py-1.5 rounded-lg bg-red-950/20 shadow-[0_0_10px_rgba(239,68,68,0.15)] animate-[pulse_2s_infinite]">
               <span className="text-[10px] text-red-500 font-extrabold tracking-widest leading-none">{zhCN.notices.enemyNoCards}</span>
@@ -2869,7 +2869,7 @@ export default function App() {
         </div>
 
         {/* AI DISCARD PILE (TOP-RIGHT AREA Adjacent to AI Hand) */}
-        <div className="absolute top-[18px] right-[220px] flex items-center justify-end select-none font-mono relative">
+        <div className="absolute top-4 right-[220px] flex items-center justify-end select-none font-mono">
           <AnimatePresence>
             {aiDiscardPrompt && (
               <motion.div
@@ -2990,8 +2990,8 @@ export default function App() {
               </div>
             </motion.div>
           ) : (
-            <div key="battle" className="flex flex-col gap-6 items-center relative">
-              <div className={`route-event-panel route-event-panel--${activeEnvironmentType.toLowerCase()} absolute -top-20 left-1/2 -translate-x-1/2 w-[286px] rounded-md border px-3 py-2 text-center font-mono ${mutationEventPulse ? 'route-event-panel--pulse' : ''}`}>
+            <div key="battle" className="flex flex-col gap-3 items-center relative">
+              <div className={`route-event-panel route-event-panel--${activeEnvironmentType.toLowerCase()} fixed top-[104px] left-[max(18px,calc((100vw-1500px)/2+24px))] z-[18] w-[260px] rounded-md border px-2.5 py-1.5 text-center font-mono ${mutationEventPulse ? 'route-event-panel--pulse' : ''}`}>
                 <div className="relative z-10 text-[8px] font-black tracking-[0.22em] text-white/42">{currentModeConfig.name}</div>
                 {currentModeConfig.environmentMode === 'SINGLE' ? (
                   <div className="relative z-10 mt-1 flex flex-col items-center justify-center">
@@ -3428,10 +3428,10 @@ export default function App() {
       </div>
 
       {/* Footer / Hand */}
-      <div className="h-[240px] bg-surface border-t border-border px-8 py-4 flex items-center justify-between z-20 relative select-none">
+      <div className="h-[190px] bg-surface border-t border-border px-8 py-3 flex items-center justify-center z-20 relative select-none">
         
         {/* LEFT COLUMN: SHARED DRAW PILE */}
-        <div className="w-[180px] flex flex-col items-center justify-center relative select-none">
+        <div className="fixed bottom-[28px] right-[max(116px,calc((100vw-1500px)/2+116px))] z-[24] w-[86px] flex flex-col items-center justify-center select-none">
           {/* AnimatePresence for Shared Deck temporary floating prompts */}
           <AnimatePresence>
             {sharedDeckPrompt && (
@@ -3473,19 +3473,19 @@ export default function App() {
             </AnimatePresence>
 
             {/* Deck stack view */}
-            <div className={`relative w-[50px] h-[70px] flex items-center justify-center transition-transform duration-250 ${
+            <div className={`relative w-[42px] h-[58px] flex items-center justify-center transition-transform duration-250 ${
               sharedDeckScale ? 'scale-[1.08]' : ''
             }`}>
               {/* Card 3 (Bottom) */}
               {state.drawPile.length > 2 && (
-                <div className="absolute w-[44px] h-[64px] bg-zinc-850 border border-zinc-750/30 rounded-md translate-x-1 translate-y-1 rotate-6 opacity-30 shadow-sm" />
+                <div className="absolute w-[36px] h-[52px] bg-zinc-850 border border-zinc-750/30 rounded-md translate-x-1 translate-y-1 rotate-6 opacity-30 shadow-sm" />
               )}
               {/* Card 2 (Middle) */}
               {state.drawPile.length > 1 && (
-                <div className="absolute w-[46px] h-[66px] bg-zinc-800 border border-zinc-700 rounded-md translate-x-0.5 translate-y-0.5 rotate-3 opacity-60 shadow flex items-center justify-center" />
+                <div className="absolute w-[38px] h-[54px] bg-zinc-800 border border-zinc-700 rounded-md translate-x-0.5 translate-y-0.5 rotate-3 opacity-60 shadow flex items-center justify-center" />
               )}
               {/* Card 1 (Top) */}
-              <div className={`absolute w-[48px] h-[68px] bg-[#1a1c23] border rounded-md flex items-center justify-center shadow-md transition-all ${
+              <div className={`absolute w-[40px] h-[56px] bg-[#1a1c23] border rounded-md flex items-center justify-center shadow-md transition-all ${
                 state.drawPile.length === 0
                   ? 'border-red-500/75 bg-red-950/25 animate-[pulse_1.4s_infinite]'
                   : 'border-slate-500/35'
@@ -3508,17 +3508,17 @@ export default function App() {
         </div>
 
         {/* CENTER COLUMN: ACTIVE HAND CARDS & CONTROL BUTTONS */}
-        <div className="flex-1 flex flex-col items-center justify-center gap-5">
+        <div className="flex flex-col items-center justify-center gap-3">
           {gameMode === 'CHALLENGE' && (
-            <div className="w-[420px] max-w-full rounded-lg border border-fuchsia-300/18 bg-[#120b1b]/70 px-3 py-2 font-mono shadow-[0_0_14px_rgba(168,85,247,0.10)]">
+            <div className="fixed bottom-[18px] left-[max(18px,calc((100vw-1500px)/2+24px))] z-[24] w-[318px] rounded-lg border border-fuchsia-300/18 bg-[#120b1b]/82 px-2.5 py-2 font-mono shadow-[0_0_14px_rgba(168,85,247,0.10)]">
               <div className="mb-1 text-center text-[10px] font-black tracking-widest text-fuchsia-100/80">神明信仰</div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-1.5">
                 {DEITY_ORDER.map(deityType => {
                   const deity = DEITY_CONFIG[deityType];
                   const faith = faithState[deityType];
                   const nextThreshold = getNextFaithThreshold(faith.level);
                   return (
-                    <div key={deity.id} className="rounded-md border border-white/8 bg-black/20 px-2 py-1.5 text-center">
+                    <div key={deity.id} className="rounded-md border border-white/8 bg-black/20 px-1.5 py-1 text-center">
                       <div className="text-[10px] font-black tracking-wider text-white/85">{deity.icon} {deity.name}</div>
                       <div className="mt-0.5 text-[9px] font-extrabold text-fuchsia-100/75">Lv.{faith.level}</div>
                       <div className="mt-0.5 text-[8px] font-semibold text-white/45">
@@ -3530,9 +3530,9 @@ export default function App() {
               </div>
             </div>
           )}
-          <div className={`text-[10px] font-mono font-bold text-white/75 tracking-wider leading-tight text-center transition-transform duration-200 ${playerMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
+          <div className={`fixed bottom-[28px] right-[max(206px,calc((100vw-1500px)/2+206px))] z-[24] rounded-md border border-white/10 bg-black/28 px-2.5 py-1.5 text-[9px] font-mono font-bold text-white/75 tracking-wider leading-tight text-center transition-transform duration-200 ${playerMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
             <div>异变牌：{playerMutationCount} / {mutationLimit}</div>
-            <div className="mt-0.5 flex justify-center gap-3 text-[9px]">
+            <div className="mt-0.5 flex justify-center gap-2 text-[8px]">
               <span className="text-orange-200/85">🔥 {playerVolcanoMutationCount}</span>
               <span className="text-emerald-200/85">🌿 {playerForestMutationCount}</span>
               <span className="text-cyan-100/85">❄️ {playerGlacierMutationCount}</span>
@@ -3541,7 +3541,7 @@ export default function App() {
               <div className="mt-0.5 text-[9px] text-emerald-200/45">已达上限</div>
             )}
           </div>
-          <div className="flex gap-4 min-h-[120px] items-center">
+          <div className="flex gap-4 min-h-[116px] items-center">
             {state.playerHand.length === 0 ? (
               <div className="flex flex-col items-center justify-center font-mono text-center border border-dashed border-red-500/20 px-8 py-4 rounded-xl bg-red-950/20 shadow-[0_0_12px_rgba(239,68,68,0.15)] animate-[pulse_2s_infinite]">
                 <span className="text-red-500 text-xs font-black tracking-widest">{zhCN.notices.noCards}</span>
@@ -3633,7 +3633,7 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex flex-wrap justify-center gap-3 min-h-[40px] max-w-[680px]">
             {showResonancePreview && (
               <div className="absolute bottom-[84px] left-1/2 -translate-x-1/2 w-[220px] max-h-[44px] rounded-md border border-orange-500/25 bg-[#130b08]/88 px-2.5 py-1.5 text-center font-mono shadow-[0_0_12px_rgba(249,115,22,0.10)] pointer-events-none">
                 <div className="text-[9.5px] font-black tracking-widest text-orange-200 leading-tight">{VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣已激活</div>
@@ -3752,7 +3752,7 @@ export default function App() {
         </div>
 
         {/* RIGHT COLUMN: DISCARD PILE */}
-        <div className="w-[180px] flex flex-col items-center justify-center relative select-none">
+        <div className="fixed bottom-[28px] right-[max(24px,calc((100vw-1500px)/2+24px))] z-[24] w-[90px] flex flex-col items-center justify-center select-none">
           <AnimatePresence>
             {playerDiscardPrompt && (
               <motion.div

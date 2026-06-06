@@ -231,6 +231,7 @@ export default function App() {
     token: number;
   } | null>(null);
   const [dewdropFeedback, setDewdropFeedback] = useState<{ type: 'gain' | 'heal'; amount: number; token: number } | null>(null);
+  const [sproutFeedback, setSproutFeedback] = useState<{ success: boolean; token: number } | null>(null);
   const [glacierRecycleFeedback, setGlacierRecycleFeedback] = useState<{
     targets: Array<'PLAYER' | 'AI'>;
     echoByTarget?: Partial<Record<'PLAYER' | 'AI', boolean>>;
@@ -345,6 +346,7 @@ export default function App() {
     setBurnFeedback(null);
     setForestRecoveryFeedback(null);
     setDewdropFeedback(null);
+    setSproutFeedback(null);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
     setScorchFeedback(null);
@@ -666,6 +668,7 @@ export default function App() {
     setBurnFeedback(null);
     setForestRecoveryFeedback(null);
     setDewdropFeedback(null);
+    setSproutFeedback(null);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
     setScorchFeedback(null);
@@ -1339,6 +1342,29 @@ export default function App() {
       resultLogs.push(`[恢复] 对手 HP：${aiHpAfterDamage} → ${resolvedAiHP}`);
       resultLogs.push(`[恢复] 森林环境恢复：+${aiForestRecovery}`);
     }
+    const playerSymbiosisTriggered = playerRoleAtClash === 'HOME'
+      ? homeForestRecovery.symbiosisTriggered
+      : guestForestRecovery.symbiosisTriggered;
+    const aiSymbiosisTriggered = aiRoleAtClash === 'HOME'
+      ? homeForestRecovery.symbiosisTriggered
+      : guestForestRecovery.symbiosisTriggered;
+    const sproutSeedlingCandidate = clashSnapshot.playerHand.find(card =>
+      card.mutationType === 'FOREST' && card.forestGrowthStage === 'SEEDLING'
+    );
+    const canTriggerSprout =
+      gameMode === 'CHALLENGE'
+      && faithState.DEER_SPIRIT.level >= 2
+      && playerSymbiosisTriggered;
+    if (playerSymbiosisTriggered) {
+      resultLogs.push('[羁绊] 触发“共生绽放”');
+    }
+    if (aiSymbiosisTriggered) {
+      resultLogs.push('[羁绊] 对手触发“共生绽放”');
+    }
+    if (forestMutationCountdownReduction > 0) {
+      resultLogs.push('[环境事件] 下一次森林感染倒计时减少 1 轮');
+      pulseMutationEvent();
+    }
     if (canGenerateDewdrops) {
       resultLogs.push('[鹿灵] 触发“露华”');
       if (dewdropsGained > 0) {
@@ -1352,21 +1378,13 @@ export default function App() {
       resultLogs.push(`[鹿灵] 自动消耗露珠：${dewdropsAfterGain} → ${dewdropsAfterAutoHeal}`);
       resultLogs.push(`[恢复] 露珠恢复 ${dewdropHeal} 点生命：${resolvedPlayerHP} → ${settledPlayerHP}`);
     }
-    const playerSymbiosisTriggered = playerRoleAtClash === 'HOME'
-      ? homeForestRecovery.symbiosisTriggered
-      : guestForestRecovery.symbiosisTriggered;
-    const aiSymbiosisTriggered = aiRoleAtClash === 'HOME'
-      ? homeForestRecovery.symbiosisTriggered
-      : guestForestRecovery.symbiosisTriggered;
-    if (playerSymbiosisTriggered) {
-      resultLogs.push('[羁绊] 触发“共生绽放”');
-    }
-    if (aiSymbiosisTriggered) {
-      resultLogs.push('[羁绊] 对手触发“共生绽放”');
-    }
-    if (forestMutationCountdownReduction > 0) {
-      resultLogs.push('[环境事件] 下一次森林感染倒计时减少 1 轮');
-      pulseMutationEvent();
+    if (canTriggerSprout) {
+      resultLogs.push('[鹿灵] 触发“催芽”');
+      resultLogs.push(
+        sproutSeedlingCandidate
+          ? '[森林成长] 1 张森林幼苗已立即成熟'
+          : '[森林成长] 当前没有可成熟的森林幼苗'
+      );
     }
     if (
       gameMode === 'CHALLENGE'
@@ -1425,6 +1443,32 @@ export default function App() {
     if (dewdropsAfterAutoHeal !== playerDewdropsRef.current) {
       playerDewdropsRef.current = dewdropsAfterAutoHeal;
       setPlayerDewdrops(dewdropsAfterAutoHeal);
+    }
+    if (canTriggerSprout) {
+      if (sproutSeedlingCandidate) {
+        setState(prev => {
+          const nextState = {
+            ...prev,
+            playerHand: prev.playerHand.map(card =>
+              card.id === sproutSeedlingCandidate.id
+                ? { ...card, forestGrowthStage: 'MATURE' as const }
+                : card
+            ),
+          };
+          stateRef.current = nextState;
+          return nextState;
+        });
+        setMaturedCardGlowIds(prev => ({ ...prev, [sproutSeedlingCandidate.id]: true }));
+        scheduleSettlementTimer(() => {
+          setMaturedCardGlowIds(prev => {
+            const copy = { ...prev };
+            delete copy[sproutSeedlingCandidate.id];
+            return copy;
+          });
+        }, 800);
+      }
+      setSproutFeedback({ success: Boolean(sproutSeedlingCandidate), token: Date.now() });
+      scheduleSettlementTimer(() => setSproutFeedback(null), 780);
     }
 
     setClashResult({
@@ -4006,6 +4050,23 @@ export default function App() {
                     </div>
                     <div className="mt-1 text-[10px] font-bold text-emerald-100/75">
                       {dewdropFeedback.type === 'gain' ? `露珠 +${dewdropFeedback.amount}` : `HP +${dewdropFeedback.amount}`}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <AnimatePresence>
+                {sproutFeedback && (
+                  <motion.div
+                    key={`sprout-feedback-${sproutFeedback.token}`}
+                    initial={{ opacity: 0, y: 8, scale: 0.9 }}
+                    animate={{ opacity: [0, 1, 1, 0], y: [8, -2, -8, -14], scale: [0.9, 1.04, 1, 0.96] }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.74, ease: 'easeOut' }}
+                    className="absolute left-1/2 -top-[104px] z-[92] -translate-x-1/2 rounded-lg border border-emerald-300/35 bg-[#06130e]/94 px-3 py-2 text-center text-emerald-100 shadow-[0_0_22px_rgba(16,185,129,0.20)] pointer-events-none"
+                  >
+                    <div className="text-[11px] font-black tracking-widest">🌿 催芽</div>
+                    <div className="mt-1 text-[10px] font-bold text-emerald-100/75">
+                      {sproutFeedback.success ? '1 张森林幼苗已成熟' : '当前没有可成熟的森林幼苗'}
                     </div>
                   </motion.div>
                 )}

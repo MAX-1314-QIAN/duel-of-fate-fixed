@@ -55,6 +55,9 @@ export const KITCHEN_GOD_CONFIG = {
 export const DEER_SPIRIT_CONFIG = {
   dewdropLimit: 2,
   autoHealPerClash: 1,
+  chargeSafeHpRatio: 0.6,
+  chargeMaxHpCost: 3,
+  chargeDamagePerHp: 2,
 } as const;
 
 export const createInitialFaithState = (): FaithState => ({

@@ -232,6 +232,8 @@ export default function App() {
   } | null>(null);
   const [dewdropFeedback, setDewdropFeedback] = useState<{ type: 'gain' | 'heal'; amount: number; token: number } | null>(null);
   const [sproutFeedback, setSproutFeedback] = useState<{ success: boolean; token: number } | null>(null);
+  const [antlerChargePickerOpen, setAntlerChargePickerOpen] = useState(false);
+  const [antlerChargeFeedback, setAntlerChargeFeedback] = useState<{ hpCost: number; damage: number; token: number } | null>(null);
   const [glacierRecycleFeedback, setGlacierRecycleFeedback] = useState<{
     targets: Array<'PLAYER' | 'AI'>;
     echoByTarget?: Partial<Record<'PLAYER' | 'AI', boolean>>;
@@ -347,6 +349,8 @@ export default function App() {
     setForestRecoveryFeedback(null);
     setDewdropFeedback(null);
     setSproutFeedback(null);
+    setAntlerChargeFeedback(null);
+    setAntlerChargePickerOpen(false);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
     setScorchFeedback(null);
@@ -669,6 +673,8 @@ export default function App() {
     setForestRecoveryFeedback(null);
     setDewdropFeedback(null);
     setSproutFeedback(null);
+    setAntlerChargeFeedback(null);
+    setAntlerChargePickerOpen(false);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
     setScorchFeedback(null);
@@ -2571,6 +2577,102 @@ export default function App() {
     }, feedbackDuration);
   };
 
+  const releaseAntlerCharge = (hpCost: number) => {
+    if (gameMode !== 'CHALLENGE' || faithState.DEER_SPIRIT.level < 3) return;
+    if (!isPlayerTurnState || isProcessing || state.winner || challengeStageClear) {
+      showShortNotice('当前阶段不能释放神明技能');
+      return;
+    }
+    if (hasUsedDeitySkillThisClash) {
+      showShortNotice('本轮已经释放神明技能');
+      return;
+    }
+
+    const playerMaxHP = INITIAL_HP;
+    const safeHpLine = Math.ceil(playerMaxHP * DEER_SPIRIT_CONFIG.chargeSafeHpRatio);
+    const snapshot = stateRef.current;
+    const maxAllowedCost = Math.min(
+      DEER_SPIRIT_CONFIG.chargeMaxHpCost,
+      Math.max(0, snapshot.playerHP - safeHpLine)
+    );
+    if (hpCost < 1 || hpCost > maxAllowedCost) {
+      showShortNotice(maxAllowedCost <= 0 ? '当前生命不足以发动鹿角奔袭' : '请选择可承受的生命消耗');
+      return;
+    }
+
+    const damage = hpCost * DEER_SPIRIT_CONFIG.chargeDamagePerHp;
+    const nextPlayerHP = Math.max(safeHpLine, snapshot.playerHP - hpCost);
+    const nextAiHP = Math.max(0, snapshot.aiHP - damage);
+    const nextState: GameState = {
+      ...snapshot,
+      playerHP: nextPlayerHP,
+      aiHP: nextAiHP,
+    };
+
+    stateRef.current = nextState;
+    setState(nextState);
+    setHasUsedDeitySkillThisClash(true);
+    setAntlerChargePickerOpen(false);
+    setSelectedCards([]);
+    setAntlerChargeFeedback({ hpCost, damage, token: Date.now() });
+    setPlayerHPFlash(true);
+    setAiHPShake(true);
+    setAiHPFlash(true);
+    setLogs(prev => [
+      ...prev,
+      '[鹿灵] 释放“鹿角奔袭”',
+      `[生命转化] 玩家消耗 ${hpCost} 点生命：${snapshot.playerHP} → ${nextPlayerHP}`,
+      `[神明伤害] 鹿角奔袭造成 ${damage} 点伤害`,
+    ]);
+
+    scheduleSettlementTimer(() => {
+      setPlayerHPFlash(false);
+      setAiHPShake(false);
+      setAiHPFlash(false);
+      setAntlerChargeFeedback(null);
+    }, 900);
+
+    if (nextAiHP <= 0) {
+      setLogs(prev => [...prev, '[挑战模式] 当前对手已被鹿角奔袭击败']);
+      setIsProcessing(true);
+      scheduleSettlementTimer(() => {
+        if (currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages) {
+          enterChallengeStageClear(stateRef.current);
+          return;
+        }
+
+        invalidateBattleSession();
+        battleFrozenRef.current = true;
+        clearPendingBattleTimers();
+        enemyScorchMarksRef.current = 0;
+        setEnemyScorchMarks(0);
+        setScorchFeedback(null);
+        setHasTriggeredCoreCombustionThisEnemy(false);
+        setAntlerChargeFeedback(null);
+        setState(prev => {
+          const finalState: GameState = {
+            ...prev,
+            aiHP: 0,
+            phase: 'GAME_OVER',
+            homePlayed: [],
+            guestPlayed: [],
+            winner: 'PLAYER',
+          };
+          stateRef.current = finalState;
+          return finalState;
+        });
+        setLogs(prev => [
+          ...prev,
+          `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+          '[挑战模式] 挑战通关',
+        ]);
+        setIsProcessing(false);
+        setSettlementSubPhase(null);
+        setClashResult(null);
+      }, 700);
+    }
+  };
+
   const onPlay = () => {
     if (isProcessing || state.winner) return;
 
@@ -2705,6 +2807,25 @@ export default function App() {
     : enemyScorchMarks < KITCHEN_GOD_CONFIG.combustionMinimumMarks
       ? `至少需要 ${KITCHEN_GOD_CONFIG.combustionMinimumMarks} 层灼痕`
       : null;
+  const deerChargeSafeHpLine = Math.ceil(INITIAL_HP * DEER_SPIRIT_CONFIG.chargeSafeHpRatio);
+  const maxAntlerChargeHpCost = Math.min(
+    DEER_SPIRIT_CONFIG.chargeMaxHpCost,
+    Math.max(0, state.playerHP - deerChargeSafeHpLine)
+  );
+  const canShowAntlerChargeAction = gameMode === 'CHALLENGE'
+    && faithState.DEER_SPIRIT.level >= 3
+    && isPlayerTurnState
+    && !isRerollMode;
+  const antlerChargeDisabledReason = hasUsedDeitySkillThisClash
+    ? '本轮已经释放神明技能'
+    : maxAntlerChargeHpCost <= 0
+      ? '当前生命不足以发动鹿角奔袭'
+      : null;
+  useEffect(() => {
+    if (!canShowAntlerChargeAction) {
+      setAntlerChargePickerOpen(false);
+    }
+  }, [canShowAntlerChargeAction]);
   const hasRecoverableDiscardPile = state.playerDiscardPile.length + state.aiDiscardPile.length + state.playerOfferingPile.length > 0;
   const isSharedDeckUnavailable = state.drawPile.length === 0 && !hasRecoverableDiscardPile;
   const showResonancePreview = selectedVolcanoCards.length >= 2 && !isRerollMode && isPlayerTurnState;
@@ -4086,9 +4207,14 @@ export default function App() {
                         信仰：{nextThreshold === null ? 'MAX' : `${faith.faith} / ${nextThreshold}`}
                       </div>
                       {showDewdrops && (
-                        <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/60">
-                          露珠：{faith.level >= 1 ? `${playerDewdrops} / ${DEER_SPIRIT_CONFIG.dewdropLimit}` : '未解锁'}
-                        </div>
+                        <>
+                          <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/60">
+                            露珠：{faith.level >= 1 ? `${playerDewdrops} / ${DEER_SPIRIT_CONFIG.dewdropLimit}` : '未解锁'}
+                          </div>
+                          <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/50">
+                            鹿角奔袭：{faith.level >= 3 ? (maxAntlerChargeHpCost > 0 ? '可用' : '生命不足') : '未解锁'}
+                          </div>
+                        </>
                       )}
                     </div>
                   );
@@ -4284,6 +4410,68 @@ export default function App() {
               </button>
             )}
 
+            {canShowAntlerChargeAction && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (antlerChargeDisabledReason) {
+                      showShortNotice(antlerChargeDisabledReason);
+                      return;
+                    }
+                    setAntlerChargePickerOpen(prev => !prev);
+                  }}
+                  title={antlerChargeDisabledReason ?? undefined}
+                  aria-disabled={Boolean(antlerChargeDisabledReason)}
+                  className={`w-[128px] h-[40px] rounded-lg border font-black tracking-wider transition-all duration-200 active:scale-95
+                    ${antlerChargeDisabledReason
+                      ? 'border-zinc-700/45 bg-zinc-900/45 text-text-dim/35 cursor-pointer hover:border-emerald-400/20'
+                      : 'border-emerald-400/40 bg-[#082015]/88 text-emerald-100 shadow-lg shadow-emerald-500/10 hover:bg-[#0d2b1c]'
+                    }
+                  `}
+                >
+                  🌿 鹿角奔袭
+                </button>
+                <AnimatePresence>
+                  {antlerChargePickerOpen && !antlerChargeDisabledReason && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 4, scale: 0.96 }}
+                      transition={{ duration: 0.16 }}
+                      className="absolute bottom-[48px] left-1/2 z-[94] w-[226px] -translate-x-1/2 rounded-lg border border-emerald-300/25 bg-[#06130e]/96 p-2 text-center font-mono shadow-[0_0_22px_rgba(16,185,129,0.18)]"
+                    >
+                      <div className="text-[10px] font-black tracking-widest text-emerald-100/80">请选择消耗生命</div>
+                      <div className="mt-1 text-[8px] font-semibold text-emerald-100/45">安全线：{deerChargeSafeHpLine} HP</div>
+                      <div className="mt-2 grid grid-cols-3 gap-1.5">
+                        {[1, 2, 3].map(cost => {
+                          const disabled = cost > maxAntlerChargeHpCost;
+                          const damage = cost * DEER_SPIRIT_CONFIG.chargeDamagePerHp;
+                          return (
+                            <button
+                              key={cost}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => releaseAntlerCharge(cost)}
+                              className={`rounded-md border px-1.5 py-1.5 text-[9px] font-black leading-tight transition-all
+                                ${disabled
+                                  ? 'border-zinc-700/35 bg-zinc-900/35 text-text-dim/30 cursor-not-allowed'
+                                  : 'border-emerald-300/35 bg-emerald-950/28 text-emerald-50 hover:bg-emerald-900/35'
+                                }
+                              `}
+                            >
+                              <div>消耗 {cost} HP</div>
+                              <div className="mt-1 text-[8px] text-emerald-100/65">伤害 {damage}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
             {/* BUTTON 2: RIGHT BUTTON */}
             {isRerollMode ? (
               <button 
@@ -4429,6 +4617,23 @@ export default function App() {
             </div>
             <div className="relative z-10 mt-1 text-[10px] font-bold text-emerald-100/75">森林恢复：+2 HP</div>
             <div className="relative z-10 text-[9px] font-semibold text-emerald-100/55">下一次感染提前 1 轮</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {antlerChargeFeedback && (
+          <motion.div
+            key={`antler-charge-${antlerChargeFeedback.token}`}
+            initial={{ opacity: 0, y: 10, scale: 0.92 }}
+            animate={{ opacity: [0, 1, 1, 0], y: [10, 0, -8, -16], scale: [0.92, 1.06, 1, 0.96] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.9, ease: 'easeOut' }}
+            className="absolute left-1/2 top-[286px] z-[119] -translate-x-1/2 rounded-lg border border-emerald-300/40 bg-[#06130e]/94 px-4 py-2 text-center font-mono text-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.22)] pointer-events-none"
+          >
+            <div className="text-[13px] font-black tracking-widest">🌿 鹿角奔袭</div>
+            <div className="mt-1 text-[10px] font-bold text-emerald-100/75">消耗生命：{antlerChargeFeedback.hpCost}</div>
+            <div className="text-[10px] font-bold text-emerald-100/75">造成伤害：{antlerChargeFeedback.damage}</div>
           </motion.div>
         )}
       </AnimatePresence>

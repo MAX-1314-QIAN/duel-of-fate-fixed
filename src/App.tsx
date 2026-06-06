@@ -22,7 +22,7 @@ import {
   removeMutationFromCard,
   selectAiMutationCandidate,
 } from './game/environment';
-import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode } from './game/mode';
+import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode, getChallengeAiStageConfig } from './game/mode';
 
 const INITIAL_HP = 10;
 const MAX_HAND = 4;
@@ -617,6 +617,7 @@ export default function App() {
           zhCN.logs.reset,
           `[模式] 当前模式：${modeConfig.name}`,
           `[挑战模式] 进入第 1 / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
+          `[对手] 当前 AI 类型：${getChallengeAiStageConfig(1).name}`,
           '[环境路线] 火山 → 森林 → 冰川',
           `[环境路线] 当前环境：${environmentLabel(initialEnvironment)}`,
           `[环境事件] 下一次感染：${modeConfig.mutationIntervalRounds} 轮后`,
@@ -811,6 +812,7 @@ export default function App() {
       ...prev,
       `[公共牌库] 新关卡剩余卡牌数量：${nextDrawPile.length}`,
       `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
+      `[对手] 当前 AI 类型：${getChallengeAiStageConfig(nextStage).name}`,
       '[对手] 新的对手已进入战场',
       '[对手] 初始抽取 4 张卡牌',
     ]);
@@ -1801,6 +1803,9 @@ export default function App() {
 
     scheduleSettlementTimer(() => {
       if (battleFrozenRef.current) return;
+      const aiStageConfig = gameMode === 'CHALLENGE'
+        ? getChallengeAiStageConfig(currentChallengeStage)
+        : getChallengeAiStageConfig(3);
       let aiRerolledThisTime = false;
       let aiDiscardedCard: Card | null = null;
       let aiDrawnCard: Card | null = null;
@@ -1815,7 +1820,7 @@ export default function App() {
         let aiRerolledText = "";
 
         // Should AI reroll? Only if there are cards in the public draw pile or recyclable discard piles.
-        if (!aiHasRerolledThisTurn && hand.length > 0 && (tempDraw.length > 0 || tempPlayerDiscard.length + tempAiDiscard.length > 0) && Math.random() < 0.3) {
+        if (!aiHasRerolledThisTurn && hand.length > 0 && (tempDraw.length > 0 || tempPlayerDiscard.length + tempAiDiscard.length > 0) && Math.random() < aiStageConfig.rerollChance) {
           aiRerolledThisTime = true;
           const discardIndex = Math.floor(Math.random() * hand.length);
           aiDiscardedCard = hand[discardIndex];
@@ -1860,8 +1865,10 @@ export default function App() {
           const availableTypes = CARD_TYPES.filter(t => typeGroups[t].length > 0);
           if (availableTypes.length > 0) {
             const randomType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
-            const maxCount = Math.min(typeGroups[randomType].length, 3);
-            const count = Math.floor(Math.random() * maxCount) + 1; // 1 to 3
+            const maxCount = Math.min(typeGroups[randomType].length, aiStageConfig.attackMaxCards);
+            const count = maxCount > 1 && Math.random() >= aiStageConfig.preferSingleAttackChance
+              ? Math.floor(Math.random() * maxCount) + 1
+              : 1;
             played = typeGroups[randomType].slice(0, count);
           } else {
             played = [];
@@ -1883,22 +1890,20 @@ export default function App() {
         } 
         
         if (prev.phase === 'AI_DEFEND') {
-          // AI as Guest: 0 to Home's count
+          // AI as Guest: only use public played count. Card types are face-down here.
           const maxTake = prev.homePlayed.length;
-          const takeCount = Math.floor(Math.random() * (maxTake + 1));
+          let takeCount = Math.floor(Math.random() * (maxTake + 1));
+          if (maxTake > 0 && Math.random() < aiStageConfig.defendPassChance) {
+            takeCount = 0;
+          } else if (maxTake > 0 && Math.random() < aiStageConfig.defendFullChance) {
+            takeCount = Math.min(maxTake, hand.length);
+          }
           
           let selectedToPlay: Card[] = [];
           if (maxTake > 0 && hand.length > 0) {
-            const homeType = prev.homePlayed[0].type;
-            const counterType = (Object.entries(WIN_MAP).find(([_, val]) => val === homeType)?.[0] || 'ROCK') as CardType;
-            
-            const counters = hand.filter(c => c.type === counterType);
-            const others = hand.filter(c => c.type !== counterType);
-            
-            selectedToPlay = [...counters.slice(0, takeCount)];
-            if (selectedToPlay.length < takeCount) {
-              selectedToPlay = [...selectedToPlay, ...others.slice(0, takeCount - selectedToPlay.length)];
-            }
+            selectedToPlay = [...hand]
+              .sort(() => Math.random() - 0.5)
+              .slice(0, Math.min(takeCount, hand.length));
           }
           played = selectedToPlay;
 

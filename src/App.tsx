@@ -10,6 +10,7 @@ import {
   DEITY_ORDER,
   DeityType,
   FaithState,
+  KITCHEN_GOD_CONFIG,
   createInitialFaithState,
   getFaithLevel,
   getNextFaithThreshold,
@@ -164,6 +165,7 @@ export default function App() {
   const environmentRoundsRemainingRef = useRef(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
   const completedClashesSinceMutationRef = useRef(0);
   const claimedStageRewardStagesRef = useRef<Set<number>>(new Set());
+  const enemyScorchMarksRef = useRef(0);
   const stageSessionIdRef = useRef(0);
   const battleFrozenRef = useRef(false);
   const clearSettlementTimers = useCallback(() => {
@@ -342,6 +344,7 @@ export default function App() {
     setForestRecoveryFeedback(null);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
+    setScorchFeedback(null);
     setPlayerDiscardPrompt(null);
     setAiDiscardPrompt(null);
     setSharedDeckPrompt(null);
@@ -367,6 +370,9 @@ export default function App() {
   const [faithState, setFaithState] = useState<FaithState>(() => createInitialFaithState());
   const [offeringPickerCardId, setOfferingPickerCardId] = useState<string | null>(null);
   const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
+  const [hasUsedDeitySkillThisClash, setHasUsedDeitySkillThisClash] = useState(false);
+  const [enemyScorchMarks, setEnemyScorchMarks] = useState(0);
+  const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'combustion'; damage?: number; token: number } | null>(null);
   const [selectedStageReward, setSelectedStageReward] = useState<StageRewardState>(null);
   const [challengeStageClear, setChallengeStageClear] = useState<{
     completedStage: number;
@@ -599,6 +605,10 @@ export default function App() {
     setFaithState(createInitialFaithState());
     setOfferingPickerCardId(null);
     setHasOfferedThisClash(false);
+    setHasUsedDeitySkillThisClash(false);
+    enemyScorchMarksRef.current = 0;
+    setEnemyScorchMarks(0);
+    setScorchFeedback(null);
     setSelectedStageReward(null);
     setChallengeStageClear(null);
     setChallengeStageNotice(null);
@@ -643,6 +653,7 @@ export default function App() {
     setForestRecoveryFeedback(null);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
+    setScorchFeedback(null);
     continueAfterGlacierEchoRef.current = null;
     continueAfterMutationRef.current = null;
     setPlayerDiscardPrompt(null);
@@ -770,7 +781,11 @@ export default function App() {
       winner: null,
     };
     stateRef.current = frozenState;
+    enemyScorchMarksRef.current = 0;
+    setEnemyScorchMarks(0);
+    setScorchFeedback(null);
     setState(frozenState);
+    setHasUsedDeitySkillThisClash(false);
     setChallengeStageClear({
       completedStage: currentChallengeStage,
       nextStage: currentChallengeStage + 1,
@@ -855,6 +870,10 @@ export default function App() {
     setChallengeStageClear(null);
     setSelectedCards([]);
     setHasOfferedThisClash(false);
+    setHasUsedDeitySkillThisClash(false);
+    enemyScorchMarksRef.current = 0;
+    setEnemyScorchMarks(0);
+    setScorchFeedback(null);
     setSelectedStageReward(null);
     setIsProcessing(false);
     setSettlementSubPhase(null);
@@ -1166,6 +1185,9 @@ export default function App() {
     const aiVolcanoDamage = aiRoleAtClash === 'HOME' ? volcanoDamageToHome : volcanoDamageToGuest;
     const playerResonanceDamage = playerRoleAtClash === 'HOME' ? resonanceDamageToHome : resonanceDamageToGuest;
     const aiResonanceDamage = aiRoleAtClash === 'HOME' ? resonanceDamageToHome : resonanceDamageToGuest;
+    const playerSuccessfulVolcanoHits = playerRoleAtClash === 'HOME'
+      ? finalHomeAttack.filter(card => card.mutationType === 'VOLCANO').length
+      : guestDamagingCards.filter(card => card.mutationType === 'VOLCANO').length;
     const homeInitialHP = playerRoleAtClash === 'HOME' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
     const guestInitialHP = playerRoleAtClash === 'GUEST' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
     const homeHpAfterDamage = Math.max(0, homeInitialHP - hDamage);
@@ -1278,6 +1300,22 @@ export default function App() {
     if (forestMutationCountdownReduction > 0) {
       resultLogs.push('[环境事件] 下一次森林感染倒计时减少 1 轮');
       pulseMutationEvent();
+    }
+    if (gameMode === 'CHALLENGE' && faithState.KITCHEN_GOD.level >= 1 && playerSuccessfulVolcanoHits > 0) {
+      const scorchBefore = enemyScorchMarksRef.current;
+      const scorchAfter = Math.min(
+        KITCHEN_GOD_CONFIG.scorchMarkLimit,
+        scorchBefore + playerSuccessfulVolcanoHits
+      );
+      if (scorchAfter > scorchBefore) {
+        enemyScorchMarksRef.current = scorchAfter;
+        setEnemyScorchMarks(scorchAfter);
+        setScorchFeedback({ type: 'mark', token: Date.now() });
+        scheduleSettlementTimer(() => {
+          setScorchFeedback(null);
+        }, 760);
+        resultLogs.push(`[灶神] 火山异变牌命中，敌方灼痕：${scorchBefore} → ${scorchAfter}`);
+      }
     }
     if (homeResonanceBonus > 0 || guestResonanceBonus > 0) {
       const burnTargets = [
@@ -1460,6 +1498,7 @@ export default function App() {
         });
         setIsProcessing(false);
         setHasOfferedThisClash(false);
+        setHasUsedDeitySkillThisClash(false);
         setSettlementSubPhase(null);
         setClashResult(null);
       }, 450);
@@ -1730,6 +1769,9 @@ export default function App() {
         invalidateBattleSession();
         battleFrozenRef.current = true;
         clearPendingBattleTimers();
+        enemyScorchMarksRef.current = 0;
+        setEnemyScorchMarks(0);
+        setScorchFeedback(null);
         setState(prev => ({
           ...prev,
           playerHP: resolvedPlayerHP,
@@ -1891,7 +1933,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
+  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -2261,6 +2303,90 @@ export default function App() {
     ]);
   };
 
+  const releaseCombustion = () => {
+    if (gameMode !== 'CHALLENGE' || faithState.KITCHEN_GOD.level < 1) return;
+    if (!isPlayerTurnState || isProcessing || state.winner || challengeStageClear) {
+      showShortNotice('当前阶段不能释放神明技能');
+      return;
+    }
+    if (hasUsedDeitySkillThisClash) {
+      showShortNotice('本轮已经释放神明技能');
+      return;
+    }
+    const scorchBefore = enemyScorchMarksRef.current;
+    if (scorchBefore < KITCHEN_GOD_CONFIG.combustionMinimumMarks) {
+      showShortNotice(`至少需要 ${KITCHEN_GOD_CONFIG.combustionMinimumMarks} 层灼痕`);
+      return;
+    }
+
+    const damage = scorchBefore;
+    const snapshot = stateRef.current;
+    const nextAiHP = Math.max(0, snapshot.aiHP - damage);
+    const nextState: GameState = {
+      ...snapshot,
+      aiHP: nextAiHP,
+    };
+
+    enemyScorchMarksRef.current = 0;
+    setEnemyScorchMarks(0);
+    setHasUsedDeitySkillThisClash(true);
+    setIsProcessing(true);
+    setScorchFeedback({ type: 'combustion', damage, token: Date.now() });
+    setAiHPShake(true);
+    setAiHPFlash(true);
+    stateRef.current = nextState;
+    setState(nextState);
+    setLogs(prev => [
+      ...prev,
+      '[灶神] 释放“爆燃”',
+      `[灶神] 消耗灼痕：${scorchBefore} → 0`,
+      `[神明伤害] 爆燃造成 ${damage} 点伤害`,
+    ]);
+
+    scheduleSettlementTimer(() => {
+      setAiHPShake(false);
+      setAiHPFlash(false);
+    }, 520);
+
+    scheduleSettlementTimer(() => {
+      setScorchFeedback(null);
+      if (nextAiHP <= 0) {
+        setLogs(prev => [...prev, '[挑战模式] 当前对手已被爆燃击败']);
+        if (currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages) {
+          enterChallengeStageClear(stateRef.current);
+          return;
+        }
+
+        invalidateBattleSession();
+        battleFrozenRef.current = true;
+        clearPendingBattleTimers();
+        setState(prev => {
+          const finalState: GameState = {
+            ...prev,
+            aiHP: 0,
+            phase: 'GAME_OVER',
+            homePlayed: [],
+            guestPlayed: [],
+            winner: 'PLAYER',
+          };
+          stateRef.current = finalState;
+          return finalState;
+        });
+        setLogs(prev => [
+          ...prev,
+          `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+          '[挑战模式] 挑战通关',
+        ]);
+        setIsProcessing(false);
+        setSettlementSubPhase(null);
+        setClashResult(null);
+        return;
+      }
+
+      setIsProcessing(false);
+    }, 820);
+  };
+
   const onPlay = () => {
     if (isProcessing || state.winner) return;
 
@@ -2386,6 +2512,15 @@ export default function App() {
     && !isRerollMode
     && selectedCards.length === 1
     && Boolean(selectedOfferingCard?.mutationType);
+  const canShowCombustionAction = gameMode === 'CHALLENGE'
+    && faithState.KITCHEN_GOD.level >= 1
+    && isPlayerTurnState
+    && !isRerollMode;
+  const combustionDisabledReason = hasUsedDeitySkillThisClash
+    ? '本轮已经释放神明技能'
+    : enemyScorchMarks < KITCHEN_GOD_CONFIG.combustionMinimumMarks
+      ? `至少需要 ${KITCHEN_GOD_CONFIG.combustionMinimumMarks} 层灼痕`
+      : null;
   const hasRecoverableDiscardPile = state.playerDiscardPile.length + state.aiDiscardPile.length + state.playerOfferingPile.length > 0;
   const isSharedDeckUnavailable = state.drawPile.length === 0 && !hasRecoverableDiscardPile;
   const showResonancePreview = selectedVolcanoCards.length >= 2 && !isRerollMode && isPlayerTurnState;
@@ -2877,6 +3012,14 @@ export default function App() {
             </span>
             <span className="text-[10px]">生命</span>
           </div>
+          {gameMode === 'CHALLENGE' && faithState.KITCHEN_GOD.level >= 1 && (
+            <div className={`absolute right-0 -bottom-8 rounded-md border border-orange-400/28 bg-[#1a0d08]/88 px-2.5 py-1 text-right font-mono shadow-[0_0_14px_rgba(249,115,22,0.12)] transition-transform ${scorchFeedback?.type === 'mark' ? 'scale-110' : 'scale-100'}`}>
+              <div className="text-[9px] font-black tracking-widest text-orange-200">🔥 灼痕</div>
+              <div className="text-[10px] font-extrabold text-orange-100/80">
+                {enemyScorchMarks} / {KITCHEN_GOD_CONFIG.scorchMarkLimit}
+              </div>
+            </div>
+          )}
           <AnimatePresence>
             {burnFeedback?.targets.includes('AI') && (
               <motion.div
@@ -2890,6 +3033,23 @@ export default function App() {
                 {VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣 -{VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage}
                 <span className="absolute -left-3 top-2 text-[10px] opacity-80">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
                 <span className="absolute left-5 -top-2 text-[8px] opacity-60">{VOLCANO_ENVIRONMENT_CONFIG.icon}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {scorchFeedback && (
+              <motion.div
+                key={`scorch-feedback-${scorchFeedback.token}`}
+                initial={{ opacity: 0, y: 4, scale: 0.86 }}
+                animate={{ opacity: [0, 1, 1, 0], y: [4, -8, -18, -28], scale: [0.86, 1.08, 1, 0.96] }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: scorchFeedback.type === 'combustion' ? 0.95 : 0.72, ease: 'easeOut' }}
+                className="absolute right-4 top-[58px] z-[92] rounded-lg border border-orange-400/40 bg-[#1a0904]/92 px-3 py-2 text-center font-mono text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.28)] pointer-events-none"
+              >
+                <div className="text-[12px] font-black tracking-widest">🔥 {scorchFeedback.type === 'combustion' ? '爆燃' : '灼痕 +1'}</div>
+                {scorchFeedback.type === 'combustion' && (
+                  <div className="mt-1 text-[10px] font-bold text-orange-100/75">额外伤害：{scorchFeedback.damage}</div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -3856,6 +4016,23 @@ export default function App() {
                 className="w-[120px] h-[40px] rounded-lg border border-fuchsia-400/30 bg-[#1b1028]/80 text-fuchsia-100 font-black tracking-wider shadow-lg shadow-fuchsia-500/10 transition-all duration-200 hover:bg-[#261536] active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed"
               >
                 奉纳
+              </button>
+            )}
+
+            {canShowCombustionAction && (
+              <button
+                type="button"
+                onClick={releaseCombustion}
+                title={combustionDisabledReason ?? undefined}
+                aria-disabled={Boolean(combustionDisabledReason)}
+                className={`w-[120px] h-[40px] rounded-lg border font-black tracking-wider transition-all duration-200 active:scale-95
+                  ${combustionDisabledReason
+                    ? 'border-zinc-700/45 bg-zinc-900/45 text-text-dim/35 cursor-pointer hover:border-orange-400/20'
+                    : 'border-orange-400/40 bg-[#2a1108]/88 text-orange-100 shadow-lg shadow-orange-500/10 hover:bg-[#3a170a]'
+                  }
+                `}
+              >
+                🔥 爆燃
               </button>
             )}
 

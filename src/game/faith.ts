@@ -46,6 +46,11 @@ export const FAITH_LEVEL_THRESHOLDS = {
   4: 16,
 } as const;
 
+export const KITCHEN_GOD_CONFIG = {
+  scorchMarkLimit: 6,
+  combustionMinimumMarks: 3,
+} as const;
+
 export const createInitialFaithState = (): FaithState => ({
   KITCHEN_GOD: { faith: 0, level: 0 },
   DEER_SPIRIT: { faith: 0, level: 0 },

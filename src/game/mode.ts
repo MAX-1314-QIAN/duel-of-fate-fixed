@@ -19,3 +19,7 @@ export const GAME_MODE_CONFIG = {
     mutationIntervalRounds: 2,
   },
 } as const;
+
+export const CHALLENGE_STAGE_CONFIG = {
+  totalStages: 7,
+} as const;

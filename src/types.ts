@@ -20,6 +20,7 @@ export type GamePhase =
   | 'PLAYER_DEFEND' 
   | 'REVEAL'
   | 'RESOLVE' 
+  | 'CHALLENGE_STAGE_CLEAR'
   | 'GAME_OVER';
 
 export interface GameState {

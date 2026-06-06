@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowUp, ArrowDown, ArrowUpDown, Sword, RotateCcw, User, Cpu, ChevronRight, Info, Lock, Volume2, VolumeX, Settings } from 'lucide-react';
 import { Card, CardType, GameState, MutationType, WIN_MAP } from './types';
 import { zhCN } from './locales/zh-CN';
-import { allocateLimitedSharedDeckDraws, DrawQueueItem } from './game/sharedDeck';
+import { DrawQueueItem } from './game/sharedDeck';
+import { recycleDiscardPilesIntoSharedDeck } from './game/deck';
 import {
   ENVIRONMENT_ROUTE_CONFIG,
   FOREST_ENVIRONMENT_CONFIG,
@@ -21,7 +22,7 @@ import {
   removeMutationFromCard,
   selectAiMutationCandidate,
 } from './game/environment';
-import { GAME_MODE_CONFIG, GameMode } from './game/mode';
+import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode } from './game/mode';
 
 const INITIAL_HP = 10;
 const MAX_HAND = 4;
@@ -146,12 +147,20 @@ export default function App() {
   const environmentRouteIndexRef = useRef(0);
   const environmentRoundsRemainingRef = useRef(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
   const completedClashesSinceMutationRef = useRef(0);
+  const stageSessionIdRef = useRef(0);
+  const battleFrozenRef = useRef(false);
   const clearSettlementTimers = useCallback(() => {
     settlementTimersRef.current.forEach(timer => clearTimeout(timer));
     settlementTimersRef.current = [];
   }, []);
   const scheduleSettlementTimer = useCallback((fn: () => void, delay: number) => {
-    const timer = setTimeout(fn, delay);
+    const sessionId = stageSessionIdRef.current;
+    let timer: ReturnType<typeof setTimeout>;
+    timer = setTimeout(() => {
+      settlementTimersRef.current = settlementTimersRef.current.filter(item => item !== timer);
+      if (stageSessionIdRef.current !== sessionId || battleFrozenRef.current) return;
+      fn();
+    }, delay);
     settlementTimersRef.current.push(timer);
     return timer;
   }, []);
@@ -235,16 +244,16 @@ export default function App() {
     setSharedDeckChangeAmount(changeStr);
     setSharedDeckTransit(transit);
     setSharedDeckScale(true);
-    setTimeout(() => {
+    scheduleSettlementTimer(() => {
       setSharedDeckScale(false);
     }, 250);
-    setTimeout(() => {
+    scheduleSettlementTimer(() => {
       setSharedDeckPrompt(null);
       setSharedDeckSubPrompt(null);
       setSharedDeckChangeAmount(null);
       setSharedDeckTransit(null);
     }, 2000);
-  }, []);
+  }, [scheduleSettlementTimer]);
 
   const noticeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -260,7 +269,7 @@ export default function App() {
 
   const triggerCardShake = (id: string) => {
     setShakingCardIds(prev => ({ ...prev, [id]: true }));
-    setTimeout(() => {
+    scheduleSettlementTimer(() => {
       setShakingCardIds(prev => {
         const copy = { ...prev };
         delete copy[id];
@@ -286,11 +295,64 @@ export default function App() {
       setShortNotice(null);
     }, duration);
   };
+
+  const invalidateBattleSession = useCallback(() => {
+    stageSessionIdRef.current += 1;
+  }, []);
+
+  const clearPendingBattleTimers = useCallback(() => {
+    clearSettlementTimers();
+    if (noticeTimerRef.current) {
+      clearTimeout(noticeTimerRef.current);
+      noticeTimerRef.current = null;
+    }
+    if (defenseLimitNoticeTimerRef.current) {
+      clearTimeout(defenseLimitNoticeTimerRef.current);
+      defenseLimitNoticeTimerRef.current = null;
+    }
+  }, [clearSettlementTimers]);
+
+  const clearTransientBattleVisuals = useCallback(() => {
+    setActiveAnims([]);
+    setMutationPhaseNotice(null);
+    setMutationEventPulse(false);
+    setMutationAnimation(null);
+    setMutatedCardGlowIds({});
+    setMaturedCardGlowIds({});
+    setResonanceAnimation(null);
+    setBurnFeedback(null);
+    setForestRecoveryFeedback(null);
+    setGlacierRecycleFeedback(null);
+    setGlacierEchoCandidates([]);
+    setPlayerDiscardPrompt(null);
+    setAiDiscardPrompt(null);
+    setSharedDeckPrompt(null);
+    setSharedDeckSubPrompt(null);
+    setSharedDeckChangeAmount(null);
+    setSharedDeckTransit(null);
+    setSharedDeckScale(false);
+    setDefenseLimitNotice(null);
+    setShakingCardIds({});
+    setShortNotice(null);
+    setEnvironmentSwitchNotice(null);
+    setChallengeStageNotice(null);
+    continueAfterMutationRef.current = null;
+    continueAfterGlacierEchoRef.current = null;
+  }, []);
   const logContainerRef = useRef<HTMLDivElement>(null);
 
   const [screen, setScreen] = useState<'HOME' | 'BATTLE'>('HOME');
   const [selectedProtocol, setSelectedProtocol] = useState<'QUICK' | 'TRAINING' | 'CHALLENGE' | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>('QUICK');
+  const [currentChallengeStage, setCurrentChallengeStage] = useState(1);
+  const [challengeStageClear, setChallengeStageClear] = useState<{
+    completedStage: number;
+    nextStage: number;
+    playerHP: number;
+    retainedHandCount: number;
+    mutatedCardCount: number;
+  } | null>(null);
+  const [challengeStageNotice, setChallengeStageNotice] = useState<{ stage: number; token: number } | null>(null);
   const [homeLogs, setHomeLogs] = useState<string[]>([
     zhCN.logs.battleEngineOnline,
     zhCN.logs.selectProtocol,
@@ -417,8 +479,58 @@ export default function App() {
     };
   }, []);
 
+  const recycleSharedDeckIfPossible = useCallback((snapshot: GameState) => {
+    const playerDiscardCount = snapshot.playerDiscardPile.length;
+    const aiDiscardCount = snapshot.aiDiscardPile.length;
+    if (playerDiscardCount + aiDiscardCount <= 0) {
+      return {
+        state: snapshot,
+        recycled: false,
+        logs: ['[公共牌库] 没有可回收卡牌，进入最终交锋'],
+      };
+    }
+
+    const recycleResult = recycleDiscardPilesIntoSharedDeck({
+      playerDiscardPile: snapshot.playerDiscardPile,
+      aiDiscardPile: snapshot.aiDiscardPile,
+    });
+    const nextState = {
+      ...snapshot,
+      drawPile: [...snapshot.drawPile, ...recycleResult.recycledDeck],
+      playerDiscardPile: [],
+      aiDiscardPile: [],
+    };
+
+    return {
+      state: nextState,
+      recycled: true,
+      logs: [
+        '[公共牌库] 牌库已耗尽，开始回收弃牌区',
+        `[公共牌库] 回收玩家弃牌区：${playerDiscardCount} 张`,
+        `[公共牌库] 回收对手弃牌区：${aiDiscardCount} 张`,
+        `[公共牌库] 异变牌恢复为普通牌：${recycleResult.normalizedMutationCount} 张`,
+        '[公共牌库] 已重新洗牌',
+        `[公共牌库] 当前剩余：${nextState.drawPile.length} 张`,
+      ],
+    };
+  }, []);
+
+  const tryRecycleSharedDeckState = useCallback((snapshot: GameState) => {
+    const recycle = recycleSharedDeckIfPossible(snapshot);
+    if (recycle.logs.length > 0) {
+      setLogs(prev => [...prev, ...recycle.logs]);
+    }
+    if (recycle.recycled) {
+      triggerDeckFeedback('公共牌库已耗尽', '弃牌回收完成，公共牌库已重新洗牌', `+${recycle.state.drawPile.length}`, `0 → ${recycle.state.drawPile.length}`);
+    }
+    return recycle;
+  }, [recycleSharedDeckIfPossible, triggerDeckFeedback]);
+
   const resetGame = (mode: GameMode = gameMode) => {
-    clearSettlementTimers();
+    invalidateBattleSession();
+    battleFrozenRef.current = false;
+    clearPendingBattleTimers();
+    clearTransientBattleVisuals();
     const modeConfig = GAME_MODE_CONFIG[mode];
     const initialEnvironment = modeConfig.environmentRoute[0];
     const newDeck = createDeck();
@@ -440,6 +552,9 @@ export default function App() {
     };
     stateRef.current = nextState;
     setGameMode(mode);
+    setCurrentChallengeStage(1);
+    setChallengeStageClear(null);
+    setChallengeStageNotice(null);
     setState(nextState);
     setSelectedCards([]);
     setClashResult(null);
@@ -501,6 +616,7 @@ export default function App() {
       : [
           zhCN.logs.reset,
           `[模式] 当前模式：${modeConfig.name}`,
+          `[挑战模式] 进入第 1 / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
           '[环境路线] 火山 → 森林 → 冰川',
           `[环境路线] 当前环境：${environmentLabel(initialEnvironment)}`,
           `[环境事件] 下一次感染：${modeConfig.mutationIntervalRounds} 轮后`,
@@ -586,6 +702,123 @@ export default function App() {
       setEnvironmentSwitchNotice(null);
     }, 900);
   }, [currentEnvironmentRoute, roundsPerEnvironment, scheduleSettlementTimer, showMutationPhaseNotice]);
+
+  const enterChallengeStageClear = useCallback((snapshot: GameState) => {
+    if (gameMode !== 'CHALLENGE' || currentChallengeStage >= CHALLENGE_STAGE_CONFIG.totalStages) return false;
+
+    invalidateBattleSession();
+    battleFrozenRef.current = true;
+    clearPendingBattleTimers();
+    clearTransientBattleVisuals();
+
+    const frozenState: GameState = {
+      ...snapshot,
+      aiHP: 0,
+      aiHand: [],
+      aiDiscardPile: [...snapshot.aiDiscardPile, ...snapshot.aiHand],
+      phase: 'CHALLENGE_STAGE_CLEAR',
+      homePlayed: [],
+      guestPlayed: [],
+      winner: null,
+    };
+    stateRef.current = frozenState;
+    setState(frozenState);
+    setChallengeStageClear({
+      completedStage: currentChallengeStage,
+      nextStage: currentChallengeStage + 1,
+      playerHP: snapshot.playerHP,
+      retainedHandCount: snapshot.playerHand.length,
+      mutatedCardCount: countAllMutatedCards(snapshot.playerHand),
+    });
+    setLogs(prev => [
+      ...prev,
+      `[挑战模式] 第 ${currentChallengeStage} 关完成`,
+      '[挑战模式] 关卡结算已冻结，等待进入下一关',
+    ]);
+    setIsProcessing(false);
+    setSettlementSubPhase(null);
+    setClashResult(null);
+    setLogs(prev => [...prev, '[系统] 当前战斗流程已冻结']);
+    return true;
+  }, [clearPendingBattleTimers, clearTransientBattleVisuals, currentChallengeStage, gameMode, invalidateBattleSession]);
+
+  const proceedToNextChallengeStage = useCallback(() => {
+    if (!challengeStageClear) return;
+
+    invalidateBattleSession();
+    clearPendingBattleTimers();
+    clearTransientBattleVisuals();
+    const snapshot = stateRef.current;
+    if (snapshot.playerHP <= 0 || challengeStageClear.playerHP <= 0) {
+      battleFrozenRef.current = true;
+      const failedState: GameState = {
+        ...snapshot,
+        phase: 'GAME_OVER',
+        winner: 'AI',
+      };
+      stateRef.current = failedState;
+      setState(failedState);
+      setChallengeStageClear(null);
+      setLogs(prev => [...prev, '[挑战模式] 玩家生命值已归零，挑战失败']);
+      setIsProcessing(false);
+      setSettlementSubPhase(null);
+      setClashResult(null);
+      return;
+    }
+    battleFrozenRef.current = false;
+    let deckSnapshot = snapshot;
+    const nextAiHand: Card[] = [];
+    for (let i = 0; i < MAX_HAND; i += 1) {
+      if (deckSnapshot.drawPile.length <= 0) {
+        const recycle = tryRecycleSharedDeckState(deckSnapshot);
+        deckSnapshot = recycle.state;
+        if (!recycle.recycled || deckSnapshot.drawPile.length <= 0) break;
+      }
+      const [drawnCard, ...remainingDeck] = deckSnapshot.drawPile;
+      nextAiHand.push(drawnCard);
+      deckSnapshot = {
+        ...deckSnapshot,
+        drawPile: remainingDeck,
+      };
+    }
+    const nextDrawPile = deckSnapshot.drawPile;
+    const nextStage = challengeStageClear.nextStage;
+    const nextState: GameState = {
+      ...deckSnapshot,
+      aiHP: INITIAL_HP,
+      aiHand: nextAiHand,
+      drawPile: nextDrawPile,
+      homePlayed: [],
+      guestPlayed: [],
+      winner: null,
+      phase: snapshot.playerRole === 'HOME' ? 'PLAYER_ATTACK' : 'AI_ATTACK',
+      lastAction: `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关\n[对手] 新的对手已进入战场\n[对手] 初始抽取 4 张卡牌`,
+    };
+
+    stateRef.current = nextState;
+    setState(nextState);
+    setCurrentChallengeStage(nextStage);
+    setChallengeStageClear(null);
+    setSelectedCards([]);
+    setIsProcessing(false);
+    setSettlementSubPhase(null);
+    setClashResult(null);
+    setGlacierEchoCandidates([]);
+    continueAfterGlacierEchoRef.current = null;
+    setChallengeStageNotice({ stage: nextStage, token: Date.now() });
+    setLogs(prev => [...prev, '[系统] 已清理上一关残留任务']);
+    setLogs(prev => [
+      ...prev,
+      `[公共牌库] 新关卡剩余卡牌数量：${nextDrawPile.length}`,
+      `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
+      '[对手] 新的对手已进入战场',
+      '[对手] 初始抽取 4 张卡牌',
+    ]);
+    showMutationPhaseNotice(`第 ${nextStage} 关：新的对手已进入战场`, 850);
+    scheduleSettlementTimer(() => {
+      setChallengeStageNotice(null);
+    }, 900);
+  }, [challengeStageClear, clearPendingBattleTimers, clearTransientBattleVisuals, invalidateBattleSession, scheduleSettlementTimer, showMutationPhaseNotice, tryRecycleSharedDeckState]);
 
   const finishMutationStage = useCallback((playerCardId?: string) => {
     setState(prev => {
@@ -1049,16 +1282,25 @@ export default function App() {
       setSettlementSubPhase('round-end');
       scheduleSettlementTimer(() => {
         setState(prev => {
+          let working = prev;
           let winner: 'PLAYER' | 'AI' | 'DRAW' | null = null;
           let extraActionLogs = '';
 
-          if (prev.playerHP <= 0 && prev.aiHP <= 0) winner = 'DRAW';
-          else if (prev.aiHP <= 0) winner = 'PLAYER';
-          else if (prev.playerHP <= 0) winner = 'AI';
+          if (working.playerHP <= 0 && working.aiHP <= 0) winner = 'DRAW';
+          else if (working.aiHP <= 0) winner = 'PLAYER';
+          else if (working.playerHP <= 0) winner = 'AI';
 
-          if (!winner && prev.drawPile.length === 0) {
-            const playerHandCount = prev.playerHand.length;
-            const aiHandCount = prev.aiHand.length;
+          if (!winner && working.drawPile.length === 0) {
+            const recycle = recycleSharedDeckIfPossible(working);
+            if (recycle.recycled) {
+              working = recycle.state;
+              extraActionLogs += `\n${recycle.logs.join('\n')}`;
+            }
+          }
+
+          if (!winner && working.drawPile.length === 0) {
+            const playerHandCount = working.playerHand.length;
+            const aiHandCount = working.aiHand.length;
             if (playerHandCount === 0 && aiHandCount > 0) {
               winner = 'AI';
               setResourceDepletedWinnerDetail({ eng: '', chn: '失败：我方无可用卡牌' });
@@ -1076,17 +1318,48 @@ export default function App() {
             }
           }
 
-          const nextPlayerRole = prev.playerRole === 'HOME' ? 'GUEST' : 'HOME';
-          return {
-            ...prev,
+          const nextPlayerRole = working.playerRole === 'HOME' ? 'GUEST' : 'HOME';
+          if (winner === 'PLAYER' && gameMode === 'CHALLENGE' && currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages) {
+            invalidateBattleSession();
+            battleFrozenRef.current = true;
+            clearPendingBattleTimers();
+            clearTransientBattleVisuals();
+            const stageClearState: GameState = {
+              ...working,
+              phase: 'CHALLENGE_STAGE_CLEAR',
+              homePlayed: [],
+              guestPlayed: [],
+              winner: null,
+              lastAction: working.lastAction + extraActionLogs,
+            };
+            stateRef.current = stageClearState;
+            setChallengeStageClear({
+              completedStage: currentChallengeStage,
+              nextStage: currentChallengeStage + 1,
+              playerHP: working.playerHP,
+              retainedHandCount: working.playerHand.length,
+              mutatedCardCount: countAllMutatedCards(working.playerHand),
+            });
+            setLogs(prevLogs => [
+              ...prevLogs,
+              `[挑战模式] 第 ${currentChallengeStage} 关完成`,
+              '[系统] 当前战斗流程已冻结',
+            ]);
+            return stageClearState;
+          }
+
+          const nextState = {
+            ...working,
             playerRole: nextPlayerRole,
             aiRole: nextPlayerRole === 'HOME' ? 'GUEST' : 'HOME',
             phase: winner ? 'GAME_OVER' : (nextPlayerRole === 'HOME' ? 'PLAYER_ATTACK' : 'AI_ATTACK'),
             homePlayed: [],
             guestPlayed: [],
             winner,
-            lastAction: prev.lastAction + extraActionLogs,
+            lastAction: working.lastAction + extraActionLogs,
           };
+          stateRef.current = nextState;
+          return nextState;
         });
         setIsProcessing(false);
         setSettlementSubPhase(null);
@@ -1211,74 +1484,95 @@ export default function App() {
       }
 
       const action = queue[index];
-      setState(prev => {
-        const drawCount = Math.min(action.count, prev.drawPile.length);
-        if (drawCount <= 0) return prev;
-
-        const beforeDeckCount = action.beforeCount;
-        const drawnCards = prev.drawPile.slice(0, drawCount);
-        const nextDrawPile = prev.drawPile.slice(drawCount);
-        const afterDeckCount = action.afterCount;
-
-        if (action.user === 'PLAYER') {
-          drawnCards.forEach((card, cardIndex) => {
-            scheduleSettlementTimer(() => {
-              addAnimation('DRAW_PLAYER', 110, 620, 420 + (prev.playerHand.length + cardIndex) * 60, 648, card.type);
-            }, cardIndex * 100);
-          });
-          triggerDeckFeedback(`我方补牌 +${drawCount}`, zhCN.logs.playerDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
-          setLogs(logPrev => [
-            ...logPrev,
-            zhCN.logs.playerDraw(drawCount),
-            zhCN.logs.sharedDeckChange(beforeDeckCount, afterDeckCount),
-          ]);
-          return {
-            ...prev,
-            playerHand: [...prev.playerHand, ...drawnCards],
-            drawPile: nextDrawPile,
-          };
+      let current = stateRef.current;
+      if (current.drawPile.length <= 0) {
+        const recycle = tryRecycleSharedDeckState(current);
+        current = recycle.state;
+        if (!recycle.recycled || current.drawPile.length <= 0) {
+          scheduleSettlementTimer(finishReplenishment, 350);
+          return;
         }
+      }
 
-        drawnCards.forEach((_, cardIndex) => {
+      const drawCount = Math.min(action.count, current.drawPile.length);
+      if (drawCount <= 0) {
+        scheduleSettlementTimer(finishReplenishment, 350);
+        return;
+      }
+
+      const beforeDeckCount = current.drawPile.length;
+      const drawnCards = current.drawPile.slice(0, drawCount);
+      const nextDrawPile = current.drawPile.slice(drawCount);
+      const afterDeckCount = nextDrawPile.length;
+
+      if (action.user === 'PLAYER') {
+        drawnCards.forEach((card, cardIndex) => {
           scheduleSettlementTimer(() => {
-            addAnimation('DRAW_AI', 110, 620, 880 + (prev.aiHand.length + cardIndex) * 40, 60, undefined);
+            addAnimation('DRAW_PLAYER', 110, 620, 420 + (current.playerHand.length + cardIndex) * 60, 648, card.type);
           }, cardIndex * 100);
         });
-        triggerDeckFeedback(`敌方补牌 +${drawCount}`, zhCN.logs.aiDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
+        triggerDeckFeedback(`我方补牌 +${drawCount}`, zhCN.logs.playerDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
+        setLogs(logPrev => [
+          ...logPrev,
+          zhCN.logs.playerDraw(drawCount),
+          zhCN.logs.sharedDeckChange(beforeDeckCount, afterDeckCount),
+        ]);
+        const nextState = {
+          ...current,
+          playerHand: [...current.playerHand, ...drawnCards],
+          drawPile: nextDrawPile,
+        };
+        stateRef.current = nextState;
+        setState(nextState);
+      } else {
+        drawnCards.forEach((_, cardIndex) => {
+          scheduleSettlementTimer(() => {
+            addAnimation('DRAW_AI', 110, 620, 880 + (current.aiHand.length + cardIndex) * 40, 60, undefined);
+          }, cardIndex * 100);
+        });
+        triggerDeckFeedback(`对手补牌 +${drawCount}`, zhCN.logs.aiDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
         setLogs(logPrev => [
           ...logPrev,
           zhCN.logs.aiDraw(drawCount),
           zhCN.logs.sharedDeckChange(beforeDeckCount, afterDeckCount),
         ]);
-        return {
-          ...prev,
-          aiHand: [...prev.aiHand, ...drawnCards],
+        const nextState = {
+          ...current,
+          aiHand: [...current.aiHand, ...drawnCards],
           drawPile: nextDrawPile,
         };
-      });
+        stateRef.current = nextState;
+        setState(nextState);
+      }
 
       scheduleSettlementTimer(() => executeDrawQueue(queue, index + 1), 650);
     };
 
     const beginReplenishment = () => {
       setSettlementSubPhase('replenishing');
-      const latest = stateRef.current;
+      let latest = stateRef.current;
+      if (latest.drawPile.length <= 0) {
+        const recycle = tryRecycleSharedDeckState(latest);
+        latest = recycle.state;
+        if (recycle.recycled) {
+          stateRef.current = latest;
+          setState(latest);
+        } else {
+          setLogs(prev => [
+            ...prev,
+            zhCN.logs.finalClashNoReplenish,
+            zhCN.logs.playerHandRemaining(latest.playerHand.length),
+            zhCN.logs.aiHandRemaining(latest.aiHand.length),
+          ]);
+          scheduleSettlementTimer(finishTurn, 350);
+          return;
+        }
+      }
+
       const playerNeed = Math.min(2, Math.max(0, MAX_HAND - latest.playerHand.length));
       const aiNeed = Math.min(2, Math.max(0, MAX_HAND - latest.aiHand.length));
       const deckCount = latest.drawPile.length;
       const totalNeed = playerNeed + aiNeed;
-
-      if (deckCount <= 0) {
-        setLogs(prev => [
-          ...prev,
-          zhCN.logs.finalClashNoReplenish,
-          '[环境事件] 公共牌库已耗尽，感染阶段关闭',
-          zhCN.logs.playerHandRemaining(latest.playerHand.length),
-          zhCN.logs.aiHandRemaining(latest.aiHand.length),
-        ]);
-        scheduleSettlementTimer(finishTurn, 350);
-        return;
-      }
 
       if (totalNeed <= 0) {
         scheduleSettlementTimer(finishReplenishment, 350);
@@ -1291,30 +1585,53 @@ export default function App() {
         if (aiNeed > 0) queue.push({ user: 'AI', count: aiNeed });
       } else {
         const nextPlayerRole = latest.playerRole === 'HOME' ? 'GUEST' : 'HOME';
-        queue = allocateLimitedSharedDeckDraws({
-          deckCount,
-          playerNeed,
-          aiNeed,
-          nextHomeSide: nextPlayerRole === 'HOME' ? 'PLAYER' : 'AI',
-        });
+        let turn: DrawQueueItem['user'] = nextPlayerRole === 'HOME' ? 'PLAYER' : 'AI';
+        let playerRemaining = playerNeed;
+        let aiRemaining = aiNeed;
+        while (playerRemaining > 0 || aiRemaining > 0) {
+          if (turn === 'PLAYER') {
+            if (playerRemaining > 0) {
+              queue.push({ user: 'PLAYER', count: 1 });
+              playerRemaining -= 1;
+            }
+            turn = 'AI';
+          } else {
+            if (aiRemaining > 0) {
+              queue.push({ user: 'AI', count: 1 });
+              aiRemaining -= 1;
+            }
+            turn = 'PLAYER';
+          }
+        }
         setLogs(prev => [...prev, zhCN.logs.limitedSharedDeck]);
       }
-      let nextDeckCount = deckCount;
-      const queueWithSnapshots = queue.map(action => {
-        const drawCount = Math.min(action.count, nextDeckCount);
-        const snapshot = {
-          ...action,
-          beforeCount: nextDeckCount,
-          afterCount: nextDeckCount - drawCount,
-        };
-        nextDeckCount = snapshot.afterCount;
-        return snapshot;
-      });
+
+      const queueWithSnapshots = queue.map(action => ({
+        ...action,
+        beforeCount: 0,
+        afterCount: 0,
+      }));
       executeDrawQueue(queueWithSnapshots);
     };
 
     const startDiscardSequence = () => {
-      if (resolvedPlayerHP <= 0 || resolvedAiHP <= 0) {
+      const isChallengeStageWin =
+        gameMode === 'CHALLENGE'
+        && resolvedAiHP <= 0
+        && resolvedPlayerHP > 0
+        && currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages;
+
+      if ((resolvedPlayerHP <= 0 || resolvedAiHP <= 0) && !isChallengeStageWin) {
+        if (gameMode === 'CHALLENGE' && resolvedAiHP <= 0 && resolvedPlayerHP > 0) {
+          setLogs(prev => [
+            ...prev,
+            `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+            '[挑战模式] 挑战通关',
+          ]);
+        }
+        invalidateBattleSession();
+        battleFrozenRef.current = true;
+        clearPendingBattleTimers();
         setState(prev => ({
           ...prev,
           playerHP: resolvedPlayerHP,
@@ -1447,7 +1764,13 @@ export default function App() {
           stateRef.current = nextState;
           return nextState;
         });
-        scheduleSettlementTimer(beginReplenishment, discardAnimationDuration);
+        if (isChallengeStageWin) {
+          scheduleSettlementTimer(() => {
+            enterChallengeStageClear(stateRef.current);
+          }, discardAnimationDuration);
+        } else {
+          scheduleSettlementTimer(beginReplenishment, discardAnimationDuration);
+        }
       };
 
       if (playerEchoTriggered) {
@@ -1470,30 +1793,53 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentModeConfig.environmentMode, finishMutationStage, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
+  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
-    if (state.winner || isProcessing) return;
+    if (state.winner || isProcessing || battleFrozenRef.current) return;
 
-    setTimeout(() => {
+    scheduleSettlementTimer(() => {
+      if (battleFrozenRef.current) return;
       let aiRerolledThisTime = false;
       let aiDiscardedCard: Card | null = null;
       let aiDrawnCard: Card | null = null;
 
       setState(prev => {
+        if (prev.winner || (prev.phase !== 'AI_ATTACK' && prev.phase !== 'AI_DEFEND')) return prev;
+
         let hand = [...prev.aiHand];
         let tempDraw = [...prev.drawPile];
+        let tempPlayerDiscard = [...prev.playerDiscardPile];
         let tempAiDiscard = [...prev.aiDiscardPile];
         let aiRerolledText = "";
 
-        // Should AI reroll? Only if there are cards in the public draw pile!
-        if (!aiHasRerolledThisTurn && hand.length > 0 && tempDraw.length > 0 && Math.random() < 0.3) {
+        // Should AI reroll? Only if there are cards in the public draw pile or recyclable discard piles.
+        if (!aiHasRerolledThisTurn && hand.length > 0 && (tempDraw.length > 0 || tempPlayerDiscard.length + tempAiDiscard.length > 0) && Math.random() < 0.3) {
           aiRerolledThisTime = true;
           const discardIndex = Math.floor(Math.random() * hand.length);
           aiDiscardedCard = hand[discardIndex];
           hand.splice(discardIndex, 1);
           tempAiDiscard.push(aiDiscardedCard);
+
+          if (tempDraw.length === 0) {
+            const recycle = recycleDiscardPilesIntoSharedDeck({
+              playerDiscardPile: tempPlayerDiscard,
+              aiDiscardPile: tempAiDiscard,
+            });
+            tempDraw = recycle.recycledDeck;
+            tempPlayerDiscard = [];
+            tempAiDiscard = [];
+            setLogs(prevLogs => [
+              ...prevLogs,
+              '[公共牌库] 牌库已耗尽，开始回收弃牌区',
+              `[公共牌库] 回收玩家弃牌区：${prev.playerDiscardPile.length} 张`,
+              `[公共牌库] 回收对手弃牌区：${prev.aiDiscardPile.length + 1} 张`,
+              `[公共牌库] 异变牌恢复为普通牌：${recycle.normalizedMutationCount} 张`,
+              '[公共牌库] 已重新洗牌',
+              `[公共牌库] 当前剩余：${tempDraw.length} 张`,
+            ]);
+          }
 
           if (tempDraw.length > 0) {
             aiDrawnCard = tempDraw.shift()!;
@@ -1531,6 +1877,7 @@ export default function App() {
             phase: nextPhase,
             lastAction: nextAction,
             drawPile: tempDraw,
+            playerDiscardPile: tempPlayerDiscard,
             aiDiscardPile: tempAiDiscard,
           };
         } 
@@ -1569,6 +1916,7 @@ export default function App() {
             phase: 'REVEAL',
             lastAction: nextAction,
             drawPile: tempDraw,
+            playerDiscardPile: tempPlayerDiscard,
             aiDiscardPile: tempAiDiscard,
           };
         }
@@ -1582,12 +1930,12 @@ export default function App() {
           // AI discard: fly from hand (880, 60) to top-right AI discard pile (804, 46)
           addAnimation('DISCARD', 880, 60, 804, 46, (aiDiscardedCard as Card).type);
           setAiDiscardPrompt(`${zhCN.resources.aiDiscard} +1`);
-          setTimeout(() => {
+          scheduleSettlementTimer(() => {
             setAiDiscardPrompt(null);
           }, 1500);
         }
         if (aiDrawnCard) {
-          setTimeout(() => {
+          scheduleSettlementTimer(() => {
             // AI draw: fly from shared deck (110, 620) to AI hand area (880, 60) face-down
             addAnimation('DRAW_AI', 110, 620, 880, 60, undefined);
             triggerDeckFeedback('敌方重抽', zhCN.logs.aiReroll, '-1');
@@ -1595,7 +1943,7 @@ export default function App() {
         }
       }
     }, 1200);
-  }, [state.winner, isProcessing, aiHasRerolledThisTurn, addAnimation]);
+  }, [state.winner, isProcessing, aiHasRerolledThisTurn, addAnimation, scheduleSettlementTimer, triggerDeckFeedback]);
 
   // Effect to separate AI execution and Settlement triggering
   useEffect(() => {
@@ -1606,7 +1954,7 @@ export default function App() {
 
   useEffect(() => {
     if (state.phase === 'REVEAL') {
-      const timer = setTimeout(() => {
+      const timer = scheduleSettlementTimer(() => {
         setState(prev => ({
           ...prev,
           phase: 'RESOLVE',
@@ -1614,7 +1962,7 @@ export default function App() {
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [state.phase]);
+  }, [scheduleSettlementTimer, state.phase]);
 
   useEffect(() => {
     if (state.phase === 'RESOLVE' && !isProcessing) {
@@ -1655,40 +2003,57 @@ export default function App() {
     addAnimation('DISCARD', 500, 640, 902, 620, cardToDiscard.type);
 
     setPlayerDiscardPrompt(`${zhCN.resources.playerDiscard} +1`);
-    setTimeout(() => {
+    scheduleSettlementTimer(() => {
       setPlayerDiscardPrompt(null);
     }, 1500);
 
     // Stagger the drawing phase
-    setTimeout(() => {
-      if (tempDraw.length === 0) {
-        // Truly empty
-        setState(prev => ({
-          ...prev,
-          playerHand: prev.playerHand.filter(c => c.id !== rerollSelectedCardId),
-          playerDiscardPile: [...prev.playerDiscardPile, cardToDiscard],
-          lastAction: `[系统] 牌库为空，本次弃牌无法补入新牌`,
-        }));
+    scheduleSettlementTimer(() => {
+      if (battleFrozenRef.current) return;
+      let rerollSnapshot: GameState = {
+        ...stateRef.current,
+        drawPile: tempDraw,
+        playerDiscardPile: tempPlayerDiscard,
+      };
+
+      if (rerollSnapshot.drawPile.length === 0) {
+        const recycle = tryRecycleSharedDeckState(rerollSnapshot);
+        rerollSnapshot = recycle.state;
+      }
+
+      if (rerollSnapshot.drawPile.length === 0) {
+        setState(prev => {
+          const nextState = {
+            ...prev,
+            playerHand: prev.playerHand.filter(c => c.id !== rerollSelectedCardId),
+            drawPile: rerollSnapshot.drawPile,
+            playerDiscardPile: rerollSnapshot.playerDiscardPile,
+            aiDiscardPile: rerollSnapshot.aiDiscardPile,
+            lastAction: `[系统] 牌库为空，本次弃牌无法补入新牌`,
+          };
+          stateRef.current = nextState;
+          return nextState;
+        });
         setDrawWarningPopUp(true);
       } else {
-        // Draw 1 card
-        const drawnCard = tempDraw.shift()!;
-        // Draw animation: from shared deck (110, 620) to player's hand (500, 640)
+        const [drawnCard, ...nextDrawPile] = rerollSnapshot.drawPile;
         addAnimation('DRAW_PLAYER', 110, 620, 500, 640, drawnCard.type);
-
         triggerDeckFeedback('我方重抽', zhCN.logs.playerReroll, '-1');
-        
+
         setState(prev => {
           const nextHand = prev.playerHand.filter(c => c.id !== rerollSelectedCardId);
           nextHand.push(drawnCard);
-          
-          return {
+
+          const nextState = {
             ...prev,
             playerHand: nextHand,
-            drawPile: tempDraw,
-            playerDiscardPile: tempPlayerDiscard,
-            lastAction: `${zhCN.logs.playerReroll}\n${zhCN.logs.sharedDeckChange(prev.drawPile.length, tempDraw.length)}`,
+            drawPile: nextDrawPile,
+            playerDiscardPile: rerollSnapshot.playerDiscardPile,
+            aiDiscardPile: rerollSnapshot.aiDiscardPile,
+            lastAction: `${zhCN.logs.playerReroll}\n${zhCN.logs.sharedDeckChange(prev.drawPile.length, nextDrawPile.length)}`,
           };
+          stateRef.current = nextState;
+          return nextState;
         });
       }
     }, 300);
@@ -1803,7 +2168,7 @@ export default function App() {
     setSelectedCards(prev => [...prev, id]);
   };
 
-  const isPlayerTurnState = (state.phase === 'PLAYER_ATTACK' || state.phase === 'PLAYER_DEFEND') && !isProcessing;
+  const isPlayerTurnState = (state.phase === 'PLAYER_ATTACK' || state.phase === 'PLAYER_DEFEND') && !isProcessing && !challengeStageClear;
   const playerMutationCount = countAllMutatedCards(state.playerHand);
   const aiMutationCount = countAllMutatedCards(state.aiHand);
   const selectedVolcanoCards = state.playerHand.filter(card =>
@@ -1815,6 +2180,8 @@ export default function App() {
   const selectedGlacierCards = state.playerHand.filter(card =>
     selectedCards.includes(card.id) && card.mutationType === 'GLACIER'
   );
+  const hasRecoverableDiscardPile = state.playerDiscardPile.length + state.aiDiscardPile.length > 0;
+  const isSharedDeckUnavailable = state.drawPile.length === 0 && !hasRecoverableDiscardPile;
   const showResonancePreview = selectedVolcanoCards.length >= 2 && !isRerollMode && isPlayerTurnState;
   const showSymbiosisPreview = selectedMatureForestCards.length >= 2 && !isRerollMode && isPlayerTurnState;
   const showGlacierEchoPreview = selectedGlacierCards.length >= 2 && !isRerollMode && isPlayerTurnState;
@@ -2279,6 +2646,11 @@ export default function App() {
         <div className="text-center">
           <div className="text-2xl font-black tracking-[4px] leading-tight">战术猜拳</div>
           <div className="text-[11px] text-accent font-bold tracking-widest">战斗引擎 V1.0</div>
+          {screen === 'BATTLE' && gameMode === 'CHALLENGE' && (
+            <div className="mt-1 text-[10px] font-mono font-black tracking-widest text-fuchsia-200/80">
+              挑战模式 · 第 {currentChallengeStage} / {CHALLENGE_STAGE_CONFIG.totalStages} 关
+            </div>
+          )}
         </div>
 
         <div className={`relative w-[300px] text-right p-1 rounded-lg transition-all duration-350 border border-transparent ${aiHPShake ? 'animate-hp-shake' : ''} ${burnFeedback?.targets.includes('AI') ? 'burn-hp-feedback animate-burn-hp-shake' : ''} ${forestRecoveryFeedback?.recoveryByTarget.AI ? 'forest-recovery-hp-feedback' : ''} ${aiHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
@@ -2410,7 +2782,44 @@ export default function App() {
         </div>
 
         <AnimatePresence mode="wait">
-          {state.winner ? (
+          {challengeStageClear ? (
+            <motion.div
+              key="challenge-stage-clear"
+              initial={{ scale: 0.94, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="z-10 text-center font-mono"
+            >
+              <div className="text-[11px] font-black tracking-[0.24em] text-fuchsia-200/70 mb-2">挑战模式</div>
+              <h2 className="text-4xl font-black tracking-widest text-accent mb-6">
+                第 {challengeStageClear.completedStage} 关完成
+              </h2>
+              <div className="w-[360px] rounded-xl border border-fuchsia-400/25 bg-[#100b14]/92 px-6 py-5 text-left shadow-[0_0_28px_rgba(217,70,239,0.10)]">
+                <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
+                  <span className="text-text-dim">当前生命</span>
+                  <span className="font-black text-white">{challengeStageClear.playerHP} / {INITIAL_HP}</span>
+                </div>
+                <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
+                  <span className="text-text-dim">保留手牌</span>
+                  <span className="font-black text-white">{challengeStageClear.retainedHandCount} 张</span>
+                </div>
+                <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
+                  <span className="text-text-dim">当前异变牌</span>
+                  <span className="font-black text-white">{challengeStageClear.mutatedCardCount} 张</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-text-dim">下一关</span>
+                  <span className="font-black text-fuchsia-200">第 {challengeStageClear.nextStage} 关</span>
+                </div>
+              </div>
+              <button
+                onClick={proceedToNextChallengeStage}
+                className="mt-6 w-[280px] bg-fuchsia-300 text-black py-3 px-8 rounded-lg font-bold uppercase tracking-widest hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+              >
+                进入下一关
+              </button>
+            </motion.div>
+          ) : state.winner ? (
             <motion.div 
               key="gameover"
               initial={{ scale: 0.9, opacity: 0 }}
@@ -3098,8 +3507,8 @@ export default function App() {
             ) : (
               <button 
                 onClick={onStartRerollMode}
-                disabled={playerHasRerolledThisTurn || !isPlayerTurnState || isProcessing || state.drawPile.length === 0}
-                title={state.drawPile.length === 0 ? zhCN.notices.rerollDeckEmpty : undefined}
+                disabled={playerHasRerolledThisTurn || !isPlayerTurnState || isProcessing || isSharedDeckUnavailable}
+                title={isSharedDeckUnavailable ? zhCN.notices.rerollDeckEmpty : undefined}
                 className="w-[180px] h-[40px] rounded-lg font-bold text-white bg-[#2d2d35]/50 border border-zinc-800/40 tracking-wider transition-all duration-200 hover:bg-zinc-700 active:scale-95 cursor-pointer disabled:cursor-not-allowed disabled:bg-[#1a1a20]/60 disabled:text-text-dim/20 disabled:border disabled:border-zinc-800/40 flex flex-col items-center justify-center leading-tight shadow-md"
               >
                 <span className="text-[11px] font-black tracking-wider">
@@ -3326,6 +3735,22 @@ export default function App() {
               <span className="mx-2 text-white/40">→</span>
               {ENVIRONMENT_CONFIG_BY_ID[environmentSwitchNotice.to].icon} {environmentLabel(environmentSwitchNotice.to)}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {challengeStageNotice && (
+          <motion.div
+            key={`challenge-stage-${challengeStageNotice.token}`}
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
+            animate={{ opacity: [0, 1, 1, 0], y: [8, 0, -2, -6], scale: [0.96, 1, 1, 0.98] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.85, ease: 'easeOut' }}
+            className="absolute left-1/2 top-[242px] z-[120] -translate-x-1/2 rounded-lg border border-fuchsia-300/25 bg-[#100b14]/92 px-4 py-2 text-center font-mono shadow-[0_0_24px_rgba(217,70,239,0.14)] pointer-events-none"
+          >
+            <div className="text-[12px] font-black tracking-widest text-fuchsia-100">第 {challengeStageNotice.stage} 关</div>
+            <div className="mt-1 text-[10px] font-bold text-fuchsia-100/70">新的对手已进入战场</div>
           </motion.div>
         )}
       </AnimatePresence>

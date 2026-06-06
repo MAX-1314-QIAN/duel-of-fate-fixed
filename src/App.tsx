@@ -183,6 +183,7 @@ export default function App() {
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [settlementSubPhase, setSettlementSubPhase] = useState<'resolving' | 'move-to-discard' | 'replenishing' | 'replenish-complete' | 'round-end' | null>(null);
+  const [isBattleLogOpen, setIsBattleLogOpen] = useState(false);
   const [logs, setLogs] = useState<string[]>([
     zhCN.logs.battleInitialized,
     '[环境路线] 当前环境：火山',
@@ -437,7 +438,20 @@ export default function App() {
         }
       }, 50);
     }
-  }, [logs]);
+  }, [logs, isBattleLogOpen]);
+
+  useEffect(() => {
+    if (!isBattleLogOpen) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsBattleLogOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isBattleLogOpen]);
 
   // Player tactical card drawer and AI deck generator from shared deck
   const replenishHandsWithState = useCallback((
@@ -3357,12 +3371,53 @@ export default function App() {
         </AnimatePresence>
 
         {/* Game Log */}
-        <div 
-          ref={logContainerRef}
-          className="absolute left-10 bottom-10 w-[280px] h-[135px] bg-[#0a0a0b]/80 backdrop-blur-md rounded-xl p-3.5 text-[12px] overflow-y-auto border border-border custom-scrollbar flex flex-col gap-1.5 scroll-smooth z-30"
+        <button
+          type="button"
+          onClick={() => setIsBattleLogOpen(true)}
+          className="fixed left-[max(18px,calc((100vw-1500px)/2+24px))] bottom-[214px] z-[36] h-[52px] w-[52px] rounded-lg border border-border/80 bg-[#0a0a0b]/86 text-text-main shadow-[0_0_18px_rgba(0,0,0,0.28)] backdrop-blur-md transition-all hover:border-accent/45 hover:text-accent active:scale-95 flex flex-col items-center justify-center font-mono"
+          aria-label="打开战斗日志"
         >
-          <div className="font-bold text-accent text-[10px] tracking-widest sticky top-0 bg-[#0a0a0b]/10 backdrop-blur-[2px] pb-1 border-b border-border/40 z-10">战斗日志</div>
-          <div className="flex flex-col gap-1.5 pt-1 font-mono">
+          <span className="text-[18px] leading-none">☰</span>
+          <span className="mt-1 text-[10px] font-black tracking-widest leading-none">日志</span>
+          {!isBattleLogOpen && logs.length > 0 && (
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(245,158,11,0.7)]" />
+          )}
+        </button>
+
+        <AnimatePresence>
+          {isBattleLogOpen && (
+            <>
+              <motion.button
+                type="button"
+                aria-label="关闭战斗日志"
+                className="fixed inset-0 z-[64] cursor-default bg-black/5"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16 }}
+                onClick={() => setIsBattleLogOpen(false)}
+              />
+              <motion.aside
+                ref={logContainerRef}
+                className="fixed left-0 top-[190px] bottom-[205px] z-[65] w-[clamp(300px,28vw,420px)] max-h-[calc(100vh-120px)] bg-[#0a0a0b]/88 backdrop-blur-md rounded-r-xl p-3.5 text-[12px] overflow-y-auto border-y border-r border-border custom-scrollbar flex flex-col gap-1.5 scroll-smooth shadow-[18px_0_42px_rgba(0,0,0,0.34)]"
+                initial={{ x: '-102%', opacity: 0.88 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: '-102%', opacity: 0.88 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                onClick={event => event.stopPropagation()}
+              >
+                <div className="font-bold text-accent text-[10px] tracking-widest sticky top-0 bg-[#0a0a0b]/60 backdrop-blur-[3px] pb-2 border-b border-border/40 z-10 flex items-center justify-between">
+                  <span>战斗日志</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsBattleLogOpen(false)}
+                    className="h-6 w-6 rounded-md border border-white/10 bg-white/5 text-[14px] leading-none text-text-dim transition-colors hover:text-white hover:border-white/25"
+                    aria-label="关闭战斗日志"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5 pt-1 font-mono">
             {logs.map((log, index) => {
               const isPlayer = log.includes('[玩家]') || log.includes('[我方]');
               const isAI = log.includes('[对手]') || log.includes('[敌方]');
@@ -3423,8 +3478,11 @@ export default function App() {
                 </div>
               );
             })}
-          </div>
-        </div>
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Footer / Hand */}

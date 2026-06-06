@@ -233,7 +233,7 @@ export default function App() {
   const [dewdropFeedback, setDewdropFeedback] = useState<{ type: 'gain' | 'heal'; amount: number; token: number } | null>(null);
   const [sproutFeedback, setSproutFeedback] = useState<{ success: boolean; token: number } | null>(null);
   const [antlerChargePickerOpen, setAntlerChargePickerOpen] = useState(false);
-  const [antlerChargeFeedback, setAntlerChargeFeedback] = useState<{ hpCost: number; damage: number; token: number } | null>(null);
+  const [antlerChargeFeedback, setAntlerChargeFeedback] = useState<{ hpCost: number; damage: number; isSurge: boolean; token: number } | null>(null);
   const [glacierRecycleFeedback, setGlacierRecycleFeedback] = useState<{
     targets: Array<'PLAYER' | 'AI'>;
     echoByTarget?: Partial<Record<'PLAYER' | 'AI', boolean>>;
@@ -382,6 +382,7 @@ export default function App() {
   const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
   const [hasUsedDeitySkillThisClash, setHasUsedDeitySkillThisClash] = useState(false);
   const [hasTriggeredCoreCombustionThisEnemy, setHasTriggeredCoreCombustionThisEnemy] = useState(false);
+  const [hasTriggeredVerdantSurgeThisEnemy, setHasTriggeredVerdantSurgeThisEnemy] = useState(false);
   const [enemyScorchMarks, setEnemyScorchMarks] = useState(0);
   const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'fuel' | 'ember' | 'core' | 'combustion'; damage?: number; coreDamage?: number; token: number } | null>(null);
   const [selectedStageReward, setSelectedStageReward] = useState<StageRewardState>(null);
@@ -626,6 +627,7 @@ export default function App() {
     setHasOfferedThisClash(false);
     setHasUsedDeitySkillThisClash(false);
     setHasTriggeredCoreCombustionThisEnemy(false);
+    setHasTriggeredVerdantSurgeThisEnemy(false);
     enemyScorchMarksRef.current = 0;
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
@@ -812,6 +814,7 @@ export default function App() {
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
     setHasTriggeredCoreCombustionThisEnemy(false);
+    setHasTriggeredVerdantSurgeThisEnemy(false);
     setState(frozenState);
     setHasUsedDeitySkillThisClash(false);
     setChallengeStageClear({
@@ -902,6 +905,7 @@ export default function App() {
     setHasOfferedThisClash(false);
     setHasUsedDeitySkillThisClash(false);
     setHasTriggeredCoreCombustionThisEnemy(false);
+    setHasTriggeredVerdantSurgeThisEnemy(false);
     enemyScorchMarksRef.current = 0;
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
@@ -1930,6 +1934,7 @@ export default function App() {
         setEnemyScorchMarks(0);
         setScorchFeedback(null);
         setHasTriggeredCoreCombustionThisEnemy(false);
+        setHasTriggeredVerdantSurgeThisEnemy(false);
         setState(prev => ({
           ...prev,
           playerHP: settledPlayerHP,
@@ -2589,10 +2594,13 @@ export default function App() {
     }
 
     const playerMaxHP = INITIAL_HP;
-    const safeHpLine = Math.ceil(playerMaxHP * DEER_SPIRIT_CONFIG.chargeSafeHpRatio);
+    const isVerdantSurge = faithState.DEER_SPIRIT.level >= 4 && !hasTriggeredVerdantSurgeThisEnemy;
+    const safeHpLine = Math.ceil(
+      playerMaxHP * (isVerdantSurge ? DEER_SPIRIT_CONFIG.surgeSafeHpRatio : DEER_SPIRIT_CONFIG.chargeSafeHpRatio)
+    );
     const snapshot = stateRef.current;
     const maxAllowedCost = Math.min(
-      DEER_SPIRIT_CONFIG.chargeMaxHpCost,
+      isVerdantSurge ? DEER_SPIRIT_CONFIG.surgeMaxHpCost : DEER_SPIRIT_CONFIG.chargeMaxHpCost,
       Math.max(0, snapshot.playerHP - safeHpLine)
     );
     if (hpCost < 1 || hpCost > maxAllowedCost) {
@@ -2612,17 +2620,21 @@ export default function App() {
     stateRef.current = nextState;
     setState(nextState);
     setHasUsedDeitySkillThisClash(true);
+    if (isVerdantSurge) {
+      setHasTriggeredVerdantSurgeThisEnemy(true);
+    }
     setAntlerChargePickerOpen(false);
     setSelectedCards([]);
-    setAntlerChargeFeedback({ hpCost, damage, token: Date.now() });
+    setAntlerChargeFeedback({ hpCost, damage, isSurge: isVerdantSurge, token: Date.now() });
     setPlayerHPFlash(true);
     setAiHPShake(true);
     setAiHPFlash(true);
     setLogs(prev => [
       ...prev,
       '[鹿灵] 释放“鹿角奔袭”',
+      ...(isVerdantSurge ? ['[鹿灵] 触发“万木奔涌”'] : []),
       `[生命转化] 玩家消耗 ${hpCost} 点生命：${snapshot.playerHP} → ${nextPlayerHP}`,
-      `[神明伤害] 鹿角奔袭造成 ${damage} 点伤害`,
+      `[神明伤害] ${isVerdantSurge ? '万木奔涌' : '鹿角奔袭'}造成 ${damage} 点伤害`,
     ]);
 
     scheduleSettlementTimer(() => {
@@ -2633,7 +2645,7 @@ export default function App() {
     }, 900);
 
     if (nextAiHP <= 0) {
-      setLogs(prev => [...prev, '[挑战模式] 当前对手已被鹿角奔袭击败']);
+      setLogs(prev => [...prev, `[挑战模式] 当前对手已被${isVerdantSurge ? '万木奔涌' : '鹿角奔袭'}击败`]);
       setIsProcessing(true);
       scheduleSettlementTimer(() => {
         if (currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages) {
@@ -2648,6 +2660,7 @@ export default function App() {
         setEnemyScorchMarks(0);
         setScorchFeedback(null);
         setHasTriggeredCoreCombustionThisEnemy(false);
+        setHasTriggeredVerdantSurgeThisEnemy(false);
         setAntlerChargeFeedback(null);
         setState(prev => {
           const finalState: GameState = {
@@ -2807,9 +2820,18 @@ export default function App() {
     : enemyScorchMarks < KITCHEN_GOD_CONFIG.combustionMinimumMarks
       ? `至少需要 ${KITCHEN_GOD_CONFIG.combustionMinimumMarks} 层灼痕`
       : null;
-  const deerChargeSafeHpLine = Math.ceil(INITIAL_HP * DEER_SPIRIT_CONFIG.chargeSafeHpRatio);
+  const canUseVerdantSurge = gameMode === 'CHALLENGE'
+    && faithState.DEER_SPIRIT.level >= 4
+    && !hasTriggeredVerdantSurgeThisEnemy;
+  const antlerChargeSafeHpRatio = canUseVerdantSurge
+    ? DEER_SPIRIT_CONFIG.surgeSafeHpRatio
+    : DEER_SPIRIT_CONFIG.chargeSafeHpRatio;
+  const antlerChargeMaxHpCost = canUseVerdantSurge
+    ? DEER_SPIRIT_CONFIG.surgeMaxHpCost
+    : DEER_SPIRIT_CONFIG.chargeMaxHpCost;
+  const deerChargeSafeHpLine = Math.ceil(INITIAL_HP * antlerChargeSafeHpRatio);
   const maxAntlerChargeHpCost = Math.min(
-    DEER_SPIRIT_CONFIG.chargeMaxHpCost,
+    antlerChargeMaxHpCost,
     Math.max(0, state.playerHP - deerChargeSafeHpLine)
   );
   const canShowAntlerChargeAction = gameMode === 'CHALLENGE'
@@ -2822,10 +2844,10 @@ export default function App() {
       ? '当前生命不足以发动鹿角奔袭'
       : null;
   useEffect(() => {
-    if (!canShowAntlerChargeAction) {
+    if (!canShowAntlerChargeAction || antlerChargeDisabledReason) {
       setAntlerChargePickerOpen(false);
     }
-  }, [canShowAntlerChargeAction]);
+  }, [antlerChargeDisabledReason, canShowAntlerChargeAction]);
   const hasRecoverableDiscardPile = state.playerDiscardPile.length + state.aiDiscardPile.length + state.playerOfferingPile.length > 0;
   const isSharedDeckUnavailable = state.drawPile.length === 0 && !hasRecoverableDiscardPile;
   const showResonancePreview = selectedVolcanoCards.length >= 2 && !isRerollMode && isPlayerTurnState;
@@ -4214,6 +4236,11 @@ export default function App() {
                           <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/50">
                             鹿角奔袭：{faith.level >= 3 ? (maxAntlerChargeHpCost > 0 ? '可用' : '生命不足') : '未解锁'}
                           </div>
+                          {faith.level >= 4 && (
+                            <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/50">
+                              万木奔涌：{hasTriggeredVerdantSurgeThisEnemy ? '本关已触发' : '本关就绪'}
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -4432,6 +4459,12 @@ export default function App() {
                 >
                   🌿 鹿角奔袭
                 </button>
+                {faithState.DEER_SPIRIT.level >= 4 && (
+                  <div className="absolute left-1/2 top-[44px] w-[110px] -translate-x-1/2 rounded border border-emerald-300/18 bg-black/35 px-1.5 py-0.5 text-center font-mono text-[7px] font-black tracking-wider text-emerald-100/55 pointer-events-none">
+                    <div>🌿 万木奔涌</div>
+                    <div>{hasTriggeredVerdantSurgeThisEnemy ? '本关已触发' : '本关就绪'}</div>
+                  </div>
+                )}
                 <AnimatePresence>
                   {antlerChargePickerOpen && !antlerChargeDisabledReason && (
                     <motion.div
@@ -4439,12 +4472,16 @@ export default function App() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 4, scale: 0.96 }}
                       transition={{ duration: 0.16 }}
-                      className="absolute bottom-[48px] left-1/2 z-[94] w-[226px] -translate-x-1/2 rounded-lg border border-emerald-300/25 bg-[#06130e]/96 p-2 text-center font-mono shadow-[0_0_22px_rgba(16,185,129,0.18)]"
+                      className={`absolute bottom-[48px] left-1/2 z-[94] -translate-x-1/2 rounded-lg border border-emerald-300/25 bg-[#06130e]/96 p-2 text-center font-mono shadow-[0_0_22px_rgba(16,185,129,0.18)] ${antlerChargeMaxHpCost > 3 ? 'w-[360px]' : 'w-[226px]'}`}
                     >
-                      <div className="text-[10px] font-black tracking-widest text-emerald-100/80">请选择消耗生命</div>
-                      <div className="mt-1 text-[8px] font-semibold text-emerald-100/45">安全线：{deerChargeSafeHpLine} HP</div>
-                      <div className="mt-2 grid grid-cols-3 gap-1.5">
-                        {[1, 2, 3].map(cost => {
+                      <div className="text-[10px] font-black tracking-widest text-emerald-100/80">
+                        {canUseVerdantSurge ? '🌿 万木奔涌' : '请选择消耗生命'}
+                      </div>
+                      <div className="mt-1 text-[8px] font-semibold text-emerald-100/45">
+                        安全线：{Math.round(antlerChargeSafeHpRatio * 100)}% · 最多消耗：{antlerChargeMaxHpCost} HP
+                      </div>
+                      <div className={`mt-2 grid gap-1.5 ${antlerChargeMaxHpCost > 3 ? 'grid-cols-5' : 'grid-cols-3'}`}>
+                        {Array.from({ length: antlerChargeMaxHpCost }, (_, index) => index + 1).map(cost => {
                           const disabled = cost > maxAntlerChargeHpCost;
                           const damage = cost * DEER_SPIRIT_CONFIG.chargeDamagePerHp;
                           return (
@@ -4631,8 +4668,8 @@ export default function App() {
             transition={{ duration: 0.9, ease: 'easeOut' }}
             className="absolute left-1/2 top-[286px] z-[119] -translate-x-1/2 rounded-lg border border-emerald-300/40 bg-[#06130e]/94 px-4 py-2 text-center font-mono text-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.22)] pointer-events-none"
           >
-            <div className="text-[13px] font-black tracking-widest">🌿 鹿角奔袭</div>
-            <div className="mt-1 text-[10px] font-bold text-emerald-100/75">消耗生命：{antlerChargeFeedback.hpCost}</div>
+            <div className="text-[13px] font-black tracking-widest">🌿 {antlerChargeFeedback.isSurge ? '万木奔涌' : '鹿角奔袭'}</div>
+            <div className="mt-1 text-[10px] font-bold text-emerald-100/75">生命转化：{antlerChargeFeedback.hpCost}</div>
             <div className="text-[10px] font-bold text-emerald-100/75">造成伤害：{antlerChargeFeedback.damage}</div>
           </motion.div>
         )}

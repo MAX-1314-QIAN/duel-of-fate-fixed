@@ -58,6 +58,8 @@ export const DEER_SPIRIT_CONFIG = {
   chargeSafeHpRatio: 0.6,
   chargeMaxHpCost: 3,
   chargeDamagePerHp: 2,
+  surgeSafeHpRatio: 0.5,
+  surgeMaxHpCost: 5,
 } as const;
 
 export const createInitialFaithState = (): FaithState => ({

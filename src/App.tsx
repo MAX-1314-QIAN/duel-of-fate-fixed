@@ -70,6 +70,11 @@ const forestIcon = (card: Card) =>
 const isMatureForestCard = (card: Card) =>
   card.mutationType === 'FOREST' && card.forestGrowthStage === 'MATURE';
 type RoutedEnvironmentType = 'VOLCANO' | 'FOREST' | 'GLACIER';
+type StageRewardState = {
+  stage: number;
+  deityType: DeityType;
+} | null;
+
 const ENVIRONMENT_CONFIG_BY_ID = {
   VOLCANO: VOLCANO_ENVIRONMENT_CONFIG,
   FOREST: FOREST_ENVIRONMENT_CONFIG,
@@ -158,6 +163,7 @@ export default function App() {
   const environmentRouteIndexRef = useRef(0);
   const environmentRoundsRemainingRef = useRef(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
   const completedClashesSinceMutationRef = useRef(0);
+  const claimedStageRewardStagesRef = useRef<Set<number>>(new Set());
   const stageSessionIdRef = useRef(0);
   const battleFrozenRef = useRef(false);
   const clearSettlementTimers = useCallback(() => {
@@ -361,6 +367,7 @@ export default function App() {
   const [faithState, setFaithState] = useState<FaithState>(() => createInitialFaithState());
   const [offeringPickerCardId, setOfferingPickerCardId] = useState<string | null>(null);
   const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
+  const [selectedStageReward, setSelectedStageReward] = useState<StageRewardState>(null);
   const [challengeStageClear, setChallengeStageClear] = useState<{
     completedStage: number;
     nextStage: number;
@@ -588,9 +595,11 @@ export default function App() {
     stateRef.current = nextState;
     setGameMode(mode);
     setCurrentChallengeStage(1);
+    claimedStageRewardStagesRef.current.clear();
     setFaithState(createInitialFaithState());
     setOfferingPickerCardId(null);
     setHasOfferedThisClash(false);
+    setSelectedStageReward(null);
     setChallengeStageClear(null);
     setChallengeStageNotice(null);
     setState(nextState);
@@ -783,6 +792,11 @@ export default function App() {
 
   const proceedToNextChallengeStage = useCallback(() => {
     if (!challengeStageClear) return;
+    const requiresFaithReward = challengeStageClear.completedStage <= 2;
+    if (requiresFaithReward && selectedStageReward?.stage !== challengeStageClear.completedStage) {
+      showShortNotice('请先选择一项神明赐福');
+      return;
+    }
 
     invalidateBattleSession();
     clearPendingBattleTimers();
@@ -798,6 +812,7 @@ export default function App() {
       stateRef.current = failedState;
       setState(failedState);
       setChallengeStageClear(null);
+      setSelectedStageReward(null);
       setLogs(prev => [...prev, '[挑战模式] 玩家生命值已归零，挑战失败']);
       setIsProcessing(false);
       setSettlementSubPhase(null);
@@ -840,6 +855,7 @@ export default function App() {
     setChallengeStageClear(null);
     setSelectedCards([]);
     setHasOfferedThisClash(false);
+    setSelectedStageReward(null);
     setIsProcessing(false);
     setSettlementSubPhase(null);
     setClashResult(null);
@@ -859,7 +875,47 @@ export default function App() {
     scheduleSettlementTimer(() => {
       setChallengeStageNotice(null);
     }, 900);
-  }, [challengeStageClear, clearPendingBattleTimers, clearTransientBattleVisuals, invalidateBattleSession, scheduleSettlementTimer, showMutationPhaseNotice, tryRecycleSharedDeckState]);
+  }, [challengeStageClear, clearPendingBattleTimers, clearTransientBattleVisuals, invalidateBattleSession, scheduleSettlementTimer, selectedStageReward, showMutationPhaseNotice, tryRecycleSharedDeckState]);
+
+  const claimStageFaithReward = (deityType: DeityType) => {
+    if (gameMode !== 'CHALLENGE' || !challengeStageClear) return;
+    const completedStage = challengeStageClear.completedStage;
+    if (completedStage > 2 || selectedStageReward?.stage === completedStage || claimedStageRewardStagesRef.current.has(completedStage)) return;
+
+    const deity = DEITY_CONFIG[deityType];
+    const currentFaith = faithState[deityType];
+    const faithBefore = currentFaith.faith;
+    const levelBefore = currentFaith.level;
+    const faithAfter = faithBefore + 1;
+    const levelAfter = getFaithLevel(faithAfter);
+
+    setFaithState(prev => ({
+      ...prev,
+      [deityType]: {
+        faith: faithAfter,
+        level: levelAfter,
+      },
+    }));
+    setSelectedStageReward({
+      stage: completedStage,
+      deityType,
+    });
+    claimedStageRewardStagesRef.current.add(completedStage);
+    showShortNotice(
+      levelAfter > levelBefore
+        ? `${deity.icon} ${deity.name}升级\nLv.${levelBefore} → Lv.${levelAfter}`
+        : `${deity.icon} ${deity.name}信仰 +1`,
+      900
+    );
+    setLogs(prev => [
+      ...prev,
+      `[奖励] 第 ${completedStage} 关完成，获得神明赐福`,
+      `[信仰] ${deity.name}信仰：${faithBefore} → ${faithAfter}`,
+      ...(levelAfter > levelBefore
+        ? [`[神明] ${deity.name}升级：Lv.${levelBefore} → Lv.${levelAfter}`]
+        : []),
+    ]);
+  };
 
   const finishMutationStage = useCallback((playerCardId?: string) => {
     setState(prev => {
@@ -2944,7 +3000,7 @@ export default function App() {
               <h2 className="text-4xl font-black tracking-widest text-accent mb-6">
                 第 {challengeStageClear.completedStage} 关完成
               </h2>
-              <div className="w-[360px] rounded-xl border border-fuchsia-400/25 bg-[#100b14]/92 px-6 py-5 text-left shadow-[0_0_28px_rgba(217,70,239,0.10)]">
+              <div className="w-[420px] rounded-xl border border-fuchsia-400/25 bg-[#100b14]/92 px-6 py-5 text-left shadow-[0_0_28px_rgba(217,70,239,0.10)]">
                 <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
                   <span className="text-text-dim">当前生命</span>
                   <span className="font-black text-white">{challengeStageClear.playerHP} / {INITIAL_HP}</span>
@@ -2961,10 +3017,54 @@ export default function App() {
                   <span className="text-text-dim">下一关</span>
                   <span className="font-black text-fuchsia-200">第 {challengeStageClear.nextStage} 关</span>
                 </div>
+                {challengeStageClear.completedStage <= 2 && (
+                  <div className="mt-4 border-t border-fuchsia-300/12 pt-4">
+                    <div className="text-center text-[10px] font-black tracking-widest text-fuchsia-100/75">
+                      选择一项神明赐福
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {DEITY_ORDER.map(deityType => {
+                        const deity = DEITY_CONFIG[deityType];
+                        const isClaimed = selectedStageReward?.stage === challengeStageClear.completedStage;
+                        const isSelected = isClaimed && selectedStageReward?.deityType === deityType;
+                        return (
+                          <button
+                            key={deity.id}
+                            type="button"
+                            onClick={() => claimStageFaithReward(deity.id)}
+                            disabled={isClaimed}
+                            className={`rounded-lg border px-2 py-2 text-center transition-all
+                              ${isSelected
+                                ? 'border-fuchsia-200/55 bg-fuchsia-950/45 text-fuchsia-50 shadow-[0_0_14px_rgba(217,70,239,0.16)]'
+                                : 'border-white/10 bg-black/24 text-white/78 hover:border-fuchsia-200/35 hover:bg-fuchsia-950/25'
+                              }
+                              ${isClaimed && !isSelected ? 'opacity-35 cursor-not-allowed' : ''}
+                            `}
+                          >
+                            <div className="text-xl leading-none">{deity.icon}</div>
+                            <div className="mt-1 text-[11px] font-black tracking-wider">{deity.name}</div>
+                            <div className="mt-1 text-[9px] font-bold text-fuchsia-100/70">信仰 +1</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectedStageReward?.stage === challengeStageClear.completedStage && (
+                      <div className="mt-3 rounded-md border border-fuchsia-300/18 bg-fuchsia-950/22 px-3 py-2 text-center text-[10px] font-bold tracking-wider text-fuchsia-100/80">
+                        已获得：{DEITY_CONFIG[selectedStageReward.deityType].icon} {DEITY_CONFIG[selectedStageReward.deityType].name}信仰 +1
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 onClick={proceedToNextChallengeStage}
-                className="mt-6 w-[280px] bg-fuchsia-300 text-black py-3 px-8 rounded-lg font-bold uppercase tracking-widest hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+                aria-disabled={challengeStageClear.completedStage <= 2 && selectedStageReward?.stage !== challengeStageClear.completedStage}
+                className={`mt-6 w-[280px] py-3 px-8 rounded-lg font-bold uppercase tracking-widest transition-all
+                  ${challengeStageClear.completedStage <= 2 && selectedStageReward?.stage !== challengeStageClear.completedStage
+                    ? 'bg-zinc-800/45 text-text-dim/35 border border-zinc-700/40 cursor-pointer hover:border-fuchsia-300/20'
+                    : 'bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] cursor-pointer'
+                  }
+                `}
               >
                 进入下一关
               </button>

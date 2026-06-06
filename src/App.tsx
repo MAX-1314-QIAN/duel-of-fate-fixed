@@ -9,6 +9,7 @@ import {
   DEITY_CONFIG,
   DEITY_ORDER,
   DeityType,
+  DEER_SPIRIT_CONFIG,
   FaithState,
   KITCHEN_GOD_CONFIG,
   createInitialFaithState,
@@ -229,6 +230,7 @@ export default function App() {
     symbiosisByTarget: Partial<Record<'PLAYER' | 'AI', boolean>>;
     token: number;
   } | null>(null);
+  const [dewdropFeedback, setDewdropFeedback] = useState<{ type: 'gain' | 'heal'; amount: number; token: number } | null>(null);
   const [glacierRecycleFeedback, setGlacierRecycleFeedback] = useState<{
     targets: Array<'PLAYER' | 'AI'>;
     echoByTarget?: Partial<Record<'PLAYER' | 'AI', boolean>>;
@@ -342,6 +344,7 @@ export default function App() {
     setResonanceAnimation(null);
     setBurnFeedback(null);
     setForestRecoveryFeedback(null);
+    setDewdropFeedback(null);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
     setScorchFeedback(null);
@@ -368,6 +371,7 @@ export default function App() {
   const [gameMode, setGameMode] = useState<GameMode>('QUICK');
   const [currentChallengeStage, setCurrentChallengeStage] = useState(1);
   const [faithState, setFaithState] = useState<FaithState>(() => createInitialFaithState());
+  const [playerDewdrops, setPlayerDewdrops] = useState(0);
   const [offeringPickerCardId, setOfferingPickerCardId] = useState<string | null>(null);
   const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
   const [hasUsedDeitySkillThisClash, setHasUsedDeitySkillThisClash] = useState(false);
@@ -389,6 +393,11 @@ export default function App() {
   ]);
   const [isMuted, setIsMuted] = useState(false);
   const homeLogContainerRef = useRef<HTMLDivElement>(null);
+  const playerDewdropsRef = useRef(0);
+
+  useEffect(() => {
+    playerDewdropsRef.current = playerDewdrops;
+  }, [playerDewdrops]);
 
   useEffect(() => {
     if (homeLogContainerRef.current) {
@@ -604,6 +613,8 @@ export default function App() {
     setCurrentChallengeStage(1);
     claimedStageRewardStagesRef.current.clear();
     setFaithState(createInitialFaithState());
+    playerDewdropsRef.current = 0;
+    setPlayerDewdrops(0);
     setOfferingPickerCardId(null);
     setHasOfferedThisClash(false);
     setHasUsedDeitySkillThisClash(false);
@@ -653,6 +664,7 @@ export default function App() {
     setResonanceAnimation(null);
     setBurnFeedback(null);
     setForestRecoveryFeedback(null);
+    setDewdropFeedback(null);
     setGlacierRecycleFeedback(null);
     setGlacierEchoCandidates([]);
     setScorchFeedback(null);
@@ -1232,10 +1244,36 @@ export default function App() {
     const aiForestRecovery = aiRoleAtClash === 'HOME'
       ? homeForestRecovery.finalRecovery
       : guestForestRecovery.finalRecovery;
+    const playerForestRecoveryDetail = playerRoleAtClash === 'HOME'
+      ? homeForestRecovery
+      : guestForestRecovery;
+    const playerTheoreticalForestRecovery = playerForestRecoveryDetail.baseRecovery + playerForestRecoveryDetail.symbiosisBonus;
+    const playerForestOverflowRecovery = Math.max(0, playerTheoreticalForestRecovery - playerForestRecovery);
     const playerHpAfterDamage = Math.max(0, clashSnapshot.playerHP - playerDamage);
     const aiHpAfterDamage = Math.max(0, clashSnapshot.aiHP - aiDamage);
     const resolvedPlayerHP = Math.min(INITIAL_HP, playerHpAfterDamage + playerForestRecovery);
     const resolvedAiHP = Math.min(INITIAL_HP, aiHpAfterDamage + aiForestRecovery);
+    const canGenerateDewdrops =
+      gameMode === 'CHALLENGE'
+      && faithState.DEER_SPIRIT.level >= 1
+      && playerForestOverflowRecovery > 0;
+    const dewdropsBeforeGain = playerDewdropsRef.current;
+    const dewdropsAfterGain = canGenerateDewdrops
+      ? Math.min(DEER_SPIRIT_CONFIG.dewdropLimit, dewdropsBeforeGain + playerForestOverflowRecovery)
+      : dewdropsBeforeGain;
+    const dewdropsGained = dewdropsAfterGain - dewdropsBeforeGain;
+    const canAutoHealWithDewdrop =
+      gameMode === 'CHALLENGE'
+      && faithState.DEER_SPIRIT.level >= 1
+      && playerDamage > 0
+      && resolvedPlayerHP > 0
+      && resolvedPlayerHP < INITIAL_HP
+      && dewdropsAfterGain > 0;
+    const dewdropHeal = canAutoHealWithDewdrop
+      ? Math.min(DEER_SPIRIT_CONFIG.autoHealPerClash, dewdropsAfterGain, INITIAL_HP - resolvedPlayerHP)
+      : 0;
+    const dewdropsAfterAutoHeal = dewdropsAfterGain - dewdropHeal;
+    const settledPlayerHP = Math.min(INITIAL_HP, resolvedPlayerHP + dewdropHeal);
     const forestMutationCountdownReduction =
       homeForestRecovery.symbiosisTriggered || guestForestRecovery.symbiosisTriggered
         ? 1
@@ -1291,6 +1329,19 @@ export default function App() {
       resultLogs.push('[森林恢复] 对手通过森林异变牌恢复 HP');
       resultLogs.push(`[恢复] 对手 HP：${aiHpAfterDamage} → ${resolvedAiHP}`);
       resultLogs.push(`[恢复] 森林环境恢复：+${aiForestRecovery}`);
+    }
+    if (canGenerateDewdrops) {
+      resultLogs.push('[鹿灵] 触发“露华”');
+      if (dewdropsGained > 0) {
+        resultLogs.push(`[鹿灵] 溢出恢复转化为露珠：${dewdropsBeforeGain} → ${dewdropsAfterGain}`);
+      }
+      if (dewdropsGained < playerForestOverflowRecovery) {
+        resultLogs.push(`[鹿灵] 露珠已达上限：${DEER_SPIRIT_CONFIG.dewdropLimit} / ${DEER_SPIRIT_CONFIG.dewdropLimit}`);
+      }
+    }
+    if (dewdropHeal > 0) {
+      resultLogs.push(`[鹿灵] 自动消耗露珠：${dewdropsAfterGain} → ${dewdropsAfterAutoHeal}`);
+      resultLogs.push(`[恢复] 露珠恢复 ${dewdropHeal} 点生命：${resolvedPlayerHP} → ${settledPlayerHP}`);
     }
     const playerSymbiosisTriggered = playerRoleAtClash === 'HOME'
       ? homeForestRecovery.symbiosisTriggered
@@ -1362,6 +1413,10 @@ export default function App() {
       }, 780);
     }
     setLogs(prev => [...prev, ...resultLogs]);
+    if (dewdropsAfterAutoHeal !== playerDewdropsRef.current) {
+      playerDewdropsRef.current = dewdropsAfterAutoHeal;
+      setPlayerDewdrops(dewdropsAfterAutoHeal);
+    }
 
     setClashResult({
       playerHPChange: playerDamage,
@@ -1432,9 +1487,26 @@ export default function App() {
           setForestRecoveryFeedback(null);
         }, recoveryFeedbackDuration);
       }
+      if (dewdropsGained > 0) {
+        setDewdropFeedback({ type: 'gain', amount: dewdropsGained, token: Date.now() });
+        scheduleSettlementTimer(() => {
+          if (dewdropHeal > 0) return;
+          setDewdropFeedback(null);
+        }, 780);
+      }
+      if (dewdropHeal > 0) {
+        scheduleSettlementTimer(() => {
+          setDewdropFeedback({ type: 'heal', amount: dewdropHeal, token: Date.now() });
+          setPlayerHPFlash(true);
+          scheduleSettlementTimer(() => {
+            setPlayerHPFlash(false);
+            setDewdropFeedback(null);
+          }, 760);
+        }, dewdropsGained > 0 ? 640 : 220);
+      }
       setState(prev => ({
         ...prev,
-        playerHP: resolvedPlayerHP,
+        playerHP: settledPlayerHP,
         aiHP: resolvedAiHP,
       }));
     }, 150);
@@ -1781,11 +1853,11 @@ export default function App() {
       const isChallengeStageWin =
         gameMode === 'CHALLENGE'
         && resolvedAiHP <= 0
-        && resolvedPlayerHP > 0
+        && settledPlayerHP > 0
         && currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages;
 
-      if ((resolvedPlayerHP <= 0 || resolvedAiHP <= 0) && !isChallengeStageWin) {
-        if (gameMode === 'CHALLENGE' && resolvedAiHP <= 0 && resolvedPlayerHP > 0) {
+      if ((settledPlayerHP <= 0 || resolvedAiHP <= 0) && !isChallengeStageWin) {
+        if (gameMode === 'CHALLENGE' && resolvedAiHP <= 0 && settledPlayerHP > 0) {
           setLogs(prev => [
             ...prev,
             `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
@@ -1801,12 +1873,12 @@ export default function App() {
         setHasTriggeredCoreCombustionThisEnemy(false);
         setState(prev => ({
           ...prev,
-          playerHP: resolvedPlayerHP,
+          playerHP: settledPlayerHP,
           aiHP: resolvedAiHP,
           phase: 'GAME_OVER',
           homePlayed: [],
           guestPlayed: [],
-          winner: resolvedPlayerHP <= 0 && resolvedAiHP <= 0 ? 'DRAW' : resolvedAiHP <= 0 ? 'PLAYER' : 'AI',
+          winner: settledPlayerHP <= 0 && resolvedAiHP <= 0 ? 'DRAW' : resolvedAiHP <= 0 ? 'PLAYER' : 'AI',
         }));
         setIsProcessing(false);
         setSettlementSubPhase(null);
@@ -1960,7 +2032,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
+  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.DEER_SPIRIT.level, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -3910,12 +3982,32 @@ export default function App() {
         <div className="flex flex-col items-center justify-center gap-3">
           {gameMode === 'CHALLENGE' && (
             <div className="fixed bottom-[18px] left-[max(18px,calc((100vw-1500px)/2+24px))] z-[24] w-[318px] rounded-lg border border-fuchsia-300/18 bg-[#120b1b]/82 px-2.5 py-2 font-mono shadow-[0_0_14px_rgba(168,85,247,0.10)]">
+              <AnimatePresence>
+                {dewdropFeedback && (
+                  <motion.div
+                    key={`dewdrop-feedback-${dewdropFeedback.token}`}
+                    initial={{ opacity: 0, y: 8, scale: 0.9 }}
+                    animate={{ opacity: [0, 1, 1, 0], y: [8, -2, -8, -14], scale: [0.9, 1.04, 1, 0.96] }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.74, ease: 'easeOut' }}
+                    className="absolute left-1/2 -top-14 z-[92] -translate-x-1/2 rounded-lg border border-emerald-300/35 bg-[#06130e]/94 px-3 py-2 text-center text-emerald-100 shadow-[0_0_22px_rgba(16,185,129,0.20)] pointer-events-none"
+                  >
+                    <div className="text-[11px] font-black tracking-widest">
+                      {dewdropFeedback.type === 'gain' ? '🌿 露华' : '🌿 露珠生效'}
+                    </div>
+                    <div className="mt-1 text-[10px] font-bold text-emerald-100/75">
+                      {dewdropFeedback.type === 'gain' ? `露珠 +${dewdropFeedback.amount}` : `HP +${dewdropFeedback.amount}`}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <div className="mb-1 text-center text-[10px] font-black tracking-widest text-fuchsia-100/80">神明信仰</div>
               <div className="grid grid-cols-3 gap-1.5">
                 {DEITY_ORDER.map(deityType => {
                   const deity = DEITY_CONFIG[deityType];
                   const faith = faithState[deityType];
                   const nextThreshold = getNextFaithThreshold(faith.level);
+                  const showDewdrops = deityType === 'DEER_SPIRIT';
                   return (
                     <div key={deity.id} className="rounded-md border border-white/8 bg-black/20 px-1.5 py-1 text-center">
                       <div className="text-[10px] font-black tracking-wider text-white/85">{deity.icon} {deity.name}</div>
@@ -3923,6 +4015,11 @@ export default function App() {
                       <div className="mt-0.5 text-[8px] font-semibold text-white/45">
                         信仰：{nextThreshold === null ? 'MAX' : `${faith.faith} / ${nextThreshold}`}
                       </div>
+                      {showDewdrops && (
+                        <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/60">
+                          露珠：{faith.level >= 1 ? `${playerDewdrops} / ${DEER_SPIRIT_CONFIG.dewdropLimit}` : '未解锁'}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

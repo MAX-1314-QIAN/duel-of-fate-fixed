@@ -52,6 +52,11 @@ export const KITCHEN_GOD_CONFIG = {
   coreCombustionBonusDamage: 4,
 } as const;
 
+export const DEER_SPIRIT_CONFIG = {
+  dewdropLimit: 2,
+  autoHealPerClash: 1,
+} as const;
+
 export const createInitialFaithState = (): FaithState => ({
   KITCHEN_GOD: { faith: 0, level: 0 },
   DEER_SPIRIT: { faith: 0, level: 0 },

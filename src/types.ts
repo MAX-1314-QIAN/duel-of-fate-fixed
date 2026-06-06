@@ -38,6 +38,7 @@ export interface GameState {
   drawPile: Card[];
   playerDiscardPile: Card[];
   aiDiscardPile: Card[];
+  playerOfferingPile: Card[];
 }
 
 export const WIN_MAP: Record<CardType, CardType> = {

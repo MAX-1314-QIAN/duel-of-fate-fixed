@@ -6,6 +6,16 @@ import { zhCN } from './locales/zh-CN';
 import { DrawQueueItem } from './game/sharedDeck';
 import { recycleDiscardPilesIntoSharedDeck } from './game/deck';
 import {
+  DEITY_CONFIG,
+  DEITY_ORDER,
+  DeityType,
+  FaithState,
+  createInitialFaithState,
+  getFaithLevel,
+  getNextFaithThreshold,
+  getOfferingFaithGain,
+} from './game/faith';
+import {
   ENVIRONMENT_ROUTE_CONFIG,
   FOREST_ENVIRONMENT_CONFIG,
   GLACIER_ENVIRONMENT_CONFIG,
@@ -134,6 +144,7 @@ export default function App() {
     drawPile: deckOnMount.slice(8),
     playerDiscardPile: [],
     aiDiscardPile: [],
+    playerOfferingPile: [],
   }));
 
   const stateRef = useRef<GameState>(state);
@@ -336,6 +347,7 @@ export default function App() {
     setShortNotice(null);
     setEnvironmentSwitchNotice(null);
     setChallengeStageNotice(null);
+    setOfferingPickerCardId(null);
     continueAfterMutationRef.current = null;
     continueAfterGlacierEchoRef.current = null;
   }, []);
@@ -345,6 +357,9 @@ export default function App() {
   const [selectedProtocol, setSelectedProtocol] = useState<'QUICK' | 'TRAINING' | 'CHALLENGE' | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>('QUICK');
   const [currentChallengeStage, setCurrentChallengeStage] = useState(1);
+  const [faithState, setFaithState] = useState<FaithState>(() => createInitialFaithState());
+  const [offeringPickerCardId, setOfferingPickerCardId] = useState<string | null>(null);
+  const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
   const [challengeStageClear, setChallengeStageClear] = useState<{
     completedStage: number;
     nextStage: number;
@@ -482,7 +497,8 @@ export default function App() {
   const recycleSharedDeckIfPossible = useCallback((snapshot: GameState) => {
     const playerDiscardCount = snapshot.playerDiscardPile.length;
     const aiDiscardCount = snapshot.aiDiscardPile.length;
-    if (playerDiscardCount + aiDiscardCount <= 0) {
+    const offeringCount = snapshot.playerOfferingPile.length;
+    if (playerDiscardCount + aiDiscardCount + offeringCount <= 0) {
       return {
         state: snapshot,
         recycled: false,
@@ -493,12 +509,14 @@ export default function App() {
     const recycleResult = recycleDiscardPilesIntoSharedDeck({
       playerDiscardPile: snapshot.playerDiscardPile,
       aiDiscardPile: snapshot.aiDiscardPile,
+      playerOfferingPile: snapshot.playerOfferingPile,
     });
     const nextState = {
       ...snapshot,
       drawPile: [...snapshot.drawPile, ...recycleResult.recycledDeck],
       playerDiscardPile: [],
       aiDiscardPile: [],
+      playerOfferingPile: [],
     };
 
     return {
@@ -508,6 +526,8 @@ export default function App() {
         '[公共牌库] 牌库已耗尽，开始回收弃牌区',
         `[公共牌库] 回收玩家弃牌区：${playerDiscardCount} 张`,
         `[公共牌库] 回收对手弃牌区：${aiDiscardCount} 张`,
+        `[公共牌库] 回收奉纳区：${offeringCount} 张`,
+        ...(offeringCount > 0 ? ['[公共牌库] 奉纳异变牌已恢复为普通牌'] : []),
         `[公共牌库] 异变牌恢复为普通牌：${recycleResult.normalizedMutationCount} 张`,
         '[公共牌库] 已重新洗牌',
         `[公共牌库] 当前剩余：${nextState.drawPile.length} 张`,
@@ -549,10 +569,14 @@ export default function App() {
       drawPile: newDeck.slice(8),
       playerDiscardPile: [],
       aiDiscardPile: [],
+      playerOfferingPile: [],
     };
     stateRef.current = nextState;
     setGameMode(mode);
     setCurrentChallengeStage(1);
+    setFaithState(createInitialFaithState());
+    setOfferingPickerCardId(null);
+    setHasOfferedThisClash(false);
     setChallengeStageClear(null);
     setChallengeStageNotice(null);
     setState(nextState);
@@ -801,6 +825,7 @@ export default function App() {
     setCurrentChallengeStage(nextStage);
     setChallengeStageClear(null);
     setSelectedCards([]);
+    setHasOfferedThisClash(false);
     setIsProcessing(false);
     setSettlementSubPhase(null);
     setClashResult(null);
@@ -1364,6 +1389,7 @@ export default function App() {
           return nextState;
         });
         setIsProcessing(false);
+        setHasOfferedThisClash(false);
         setSettlementSubPhase(null);
         setClashResult(null);
       }, 450);
@@ -1817,6 +1843,7 @@ export default function App() {
         let tempDraw = [...prev.drawPile];
         let tempPlayerDiscard = [...prev.playerDiscardPile];
         let tempAiDiscard = [...prev.aiDiscardPile];
+        let aiRerollRecycledOffering = false;
         let aiRerolledText = "";
 
         // Should AI reroll? Only if there are cards in the public draw pile or recyclable discard piles.
@@ -1831,15 +1858,19 @@ export default function App() {
             const recycle = recycleDiscardPilesIntoSharedDeck({
               playerDiscardPile: tempPlayerDiscard,
               aiDiscardPile: tempAiDiscard,
+              playerOfferingPile: prev.playerOfferingPile,
             });
             tempDraw = recycle.recycledDeck;
             tempPlayerDiscard = [];
             tempAiDiscard = [];
+            aiRerollRecycledOffering = true;
             setLogs(prevLogs => [
               ...prevLogs,
               '[公共牌库] 牌库已耗尽，开始回收弃牌区',
               `[公共牌库] 回收玩家弃牌区：${prev.playerDiscardPile.length} 张`,
               `[公共牌库] 回收对手弃牌区：${prev.aiDiscardPile.length + 1} 张`,
+              `[公共牌库] 回收奉纳区：${prev.playerOfferingPile.length} 张`,
+              ...(prev.playerOfferingPile.length > 0 ? ['[公共牌库] 奉纳异变牌已恢复为普通牌'] : []),
               `[公共牌库] 异变牌恢复为普通牌：${recycle.normalizedMutationCount} 张`,
               '[公共牌库] 已重新洗牌',
               `[公共牌库] 当前剩余：${tempDraw.length} 张`,
@@ -1886,6 +1917,7 @@ export default function App() {
             drawPile: tempDraw,
             playerDiscardPile: tempPlayerDiscard,
             aiDiscardPile: tempAiDiscard,
+            playerOfferingPile: aiRerollRecycledOffering ? [] : prev.playerOfferingPile,
           };
         } 
         
@@ -1923,6 +1955,7 @@ export default function App() {
             drawPile: tempDraw,
             playerDiscardPile: tempPlayerDiscard,
             aiDiscardPile: tempAiDiscard,
+            playerOfferingPile: aiRerollRecycledOffering ? [] : prev.playerOfferingPile,
           };
         }
 
@@ -2034,6 +2067,7 @@ export default function App() {
             drawPile: rerollSnapshot.drawPile,
             playerDiscardPile: rerollSnapshot.playerDiscardPile,
             aiDiscardPile: rerollSnapshot.aiDiscardPile,
+            playerOfferingPile: rerollSnapshot.playerOfferingPile,
             lastAction: `[系统] 牌库为空，本次弃牌无法补入新牌`,
           };
           stateRef.current = nextState;
@@ -2055,6 +2089,7 @@ export default function App() {
             drawPile: nextDrawPile,
             playerDiscardPile: rerollSnapshot.playerDiscardPile,
             aiDiscardPile: rerollSnapshot.aiDiscardPile,
+            playerOfferingPile: rerollSnapshot.playerOfferingPile,
             lastAction: `${zhCN.logs.playerReroll}\n${zhCN.logs.sharedDeckChange(prev.drawPile.length, nextDrawPile.length)}`,
           };
           stateRef.current = nextState;
@@ -2066,6 +2101,94 @@ export default function App() {
     setPlayerHasRerolledThisTurn(true);
     setIsRerollMode(false);
     setRerollSelectedCardId(null);
+  };
+
+  const openOfferingPicker = () => {
+    if (gameMode !== 'CHALLENGE') return;
+    if (!isPlayerTurnState || isProcessing || state.winner || challengeStageClear) {
+      showShortNotice('当前阶段不能奉纳');
+      return;
+    }
+    if (hasOfferedThisClash) {
+      showShortNotice('本轮已经完成奉纳');
+      return;
+    }
+    if (selectedCards.length !== 1) {
+      showShortNotice('请选择 1 张异变牌进行奉纳');
+      return;
+    }
+    const selectedCard = state.playerHand.find(card => card.id === selectedCards[0]);
+    if (!selectedCard?.mutationType) {
+      showShortNotice('普通牌不能奉纳');
+      return;
+    }
+    if (state.phase === 'PLAYER_ATTACK' && state.playerHand.length <= 1) {
+      showShortNotice('至少需要保留 1 张手牌用于出牌');
+      return;
+    }
+    setOfferingPickerCardId(selectedCard.id);
+  };
+
+  const confirmOffering = (deityType: DeityType) => {
+    if (gameMode !== 'CHALLENGE' || !isPlayerTurnState || hasOfferedThisClash) {
+      setOfferingPickerCardId(null);
+      return;
+    }
+    const offeringCard = stateRef.current.playerHand.find(card => card.id === offeringPickerCardId);
+    if (!offeringCard?.mutationType) {
+      setOfferingPickerCardId(null);
+      return;
+    }
+    if (stateRef.current.phase === 'PLAYER_ATTACK' && stateRef.current.playerHand.length <= 1) {
+      showShortNotice('至少需要保留 1 张手牌用于出牌');
+      setOfferingPickerCardId(null);
+      return;
+    }
+
+    const deity = DEITY_CONFIG[deityType];
+    const gain = getOfferingFaithGain(offeringCard, deity);
+    const cardName = mutationCardLabel(offeringCard.mutationType, offeringCard.type);
+    const currentFaith = faithState[deityType];
+    const faithBefore = currentFaith.faith;
+    const levelBefore = currentFaith.level;
+    const faithAfter = faithBefore + gain;
+    const levelAfter = getFaithLevel(faithAfter);
+
+    setState(prev => {
+      const nextState = {
+        ...prev,
+        playerHand: prev.playerHand.filter(card => card.id !== offeringCard.id),
+        playerOfferingPile: [...prev.playerOfferingPile, offeringCard],
+      };
+      stateRef.current = nextState;
+      return nextState;
+    });
+
+    setFaithState(prev => ({
+      ...prev,
+      [deityType]: {
+        faith: faithAfter,
+        level: levelAfter,
+      },
+    }));
+
+    setHasOfferedThisClash(true);
+    setSelectedCards([]);
+    setOfferingPickerCardId(null);
+    showShortNotice(
+      levelAfter > levelBefore
+        ? `${deity.icon} ${deity.name}升级\nLv.${levelBefore} → Lv.${levelAfter}`
+        : `异变牌已奉纳\n${deity.name}信仰 +${gain}`,
+      900
+    );
+    setLogs(prev => [
+      ...prev,
+      `[奉纳] 玩家将“${cardName}”奉纳给${deity.name}`,
+      `[信仰] ${deity.name}信仰：${faithBefore} → ${faithAfter}`,
+      ...(levelAfter > levelBefore
+        ? [`[神明] ${deity.name}升级：Lv.${levelBefore} → Lv.${levelAfter}`]
+        : []),
+    ]);
   };
 
   const onPlay = () => {
@@ -2185,7 +2308,15 @@ export default function App() {
   const selectedGlacierCards = state.playerHand.filter(card =>
     selectedCards.includes(card.id) && card.mutationType === 'GLACIER'
   );
-  const hasRecoverableDiscardPile = state.playerDiscardPile.length + state.aiDiscardPile.length > 0;
+  const selectedOfferingCard = selectedCards.length === 1
+    ? state.playerHand.find(card => card.id === selectedCards[0]) ?? null
+    : null;
+  const canShowOfferingAction = gameMode === 'CHALLENGE'
+    && isPlayerTurnState
+    && !isRerollMode
+    && selectedCards.length === 1
+    && Boolean(selectedOfferingCard?.mutationType);
+  const hasRecoverableDiscardPile = state.playerDiscardPile.length + state.aiDiscardPile.length + state.playerOfferingPile.length > 0;
   const isSharedDeckUnavailable = state.drawPile.length === 0 && !hasRecoverableDiscardPile;
   const showResonancePreview = selectedVolcanoCards.length >= 2 && !isRerollMode && isPlayerTurnState;
   const showSymbiosisPreview = selectedMatureForestCards.length >= 2 && !isRerollMode && isPlayerTurnState;
@@ -3378,6 +3509,27 @@ export default function App() {
 
         {/* CENTER COLUMN: ACTIVE HAND CARDS & CONTROL BUTTONS */}
         <div className="flex-1 flex flex-col items-center justify-center gap-5">
+          {gameMode === 'CHALLENGE' && (
+            <div className="w-[420px] max-w-full rounded-lg border border-fuchsia-300/18 bg-[#120b1b]/70 px-3 py-2 font-mono shadow-[0_0_14px_rgba(168,85,247,0.10)]">
+              <div className="mb-1 text-center text-[10px] font-black tracking-widest text-fuchsia-100/80">神明信仰</div>
+              <div className="grid grid-cols-3 gap-2">
+                {DEITY_ORDER.map(deityType => {
+                  const deity = DEITY_CONFIG[deityType];
+                  const faith = faithState[deityType];
+                  const nextThreshold = getNextFaithThreshold(faith.level);
+                  return (
+                    <div key={deity.id} className="rounded-md border border-white/8 bg-black/20 px-2 py-1.5 text-center">
+                      <div className="text-[10px] font-black tracking-wider text-white/85">{deity.icon} {deity.name}</div>
+                      <div className="mt-0.5 text-[9px] font-extrabold text-fuchsia-100/75">Lv.{faith.level}</div>
+                      <div className="mt-0.5 text-[8px] font-semibold text-white/45">
+                        信仰：{nextThreshold === null ? 'MAX' : `${faith.faith} / ${nextThreshold}`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className={`text-[10px] font-mono font-bold text-white/75 tracking-wider leading-tight text-center transition-transform duration-200 ${playerMutationCountPulse ? 'scale-110' : 'scale-100'}`}>
             <div>异变牌：{playerMutationCount} / {mutationLimit}</div>
             <div className="mt-0.5 flex justify-center gap-3 text-[9px]">
@@ -3536,6 +3688,16 @@ export default function App() {
                 `}
               >
                 <span className="text-[11px] font-black tracking-wider">{zhCN.actions.pass}</span>
+              </button>
+            )}
+
+            {canShowOfferingAction && (
+              <button
+                type="button"
+                onClick={openOfferingPicker}
+                className="w-[120px] h-[40px] rounded-lg border border-fuchsia-400/30 bg-[#1b1028]/80 text-fuchsia-100 font-black tracking-wider shadow-lg shadow-fuchsia-500/10 transition-all duration-200 hover:bg-[#261536] active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed"
+              >
+                奉纳
               </button>
             )}
 
@@ -3758,6 +3920,57 @@ export default function App() {
             <div className="mt-1 text-[10px] font-bold text-fuchsia-100/70">新的对手已进入战场</div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {offeringPickerCardId && (() => {
+          const offeringCard = state.playerHand.find(card => card.id === offeringPickerCardId);
+          if (!offeringCard?.mutationType) return null;
+          return (
+            <div className="absolute inset-0 z-[130] flex items-center justify-center pointer-events-none">
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0, y: 8 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.96, opacity: 0, y: 6 }}
+                transition={{ duration: 0.18 }}
+                className="w-[430px] rounded-xl border border-fuchsia-300/30 bg-[#100918]/94 p-5 text-center font-mono shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(168,85,247,0.14)] backdrop-blur-md pointer-events-auto"
+              >
+                <h3 className="text-sm font-black tracking-widest text-fuchsia-100">请选择奉纳对象</h3>
+                <p className="mt-1 text-[10px] font-semibold text-fuchsia-100/55">
+                  {mutationCardLabel(offeringCard.mutationType, offeringCard.type)}
+                </p>
+                <div className="mt-5 grid grid-cols-3 gap-3">
+                  {DEITY_ORDER.map(deityType => {
+                    const deity = DEITY_CONFIG[deityType];
+                    const gain = getOfferingFaithGain(offeringCard, deity);
+                    const sameEnvironment = gain === 2;
+                    return (
+                      <button
+                        key={deity.id}
+                        type="button"
+                        onClick={() => confirmOffering(deity.id)}
+                        className="rounded-lg border border-white/10 bg-black/24 px-2 py-3 text-center transition-all hover:-translate-y-0.5 hover:border-fuchsia-200/35 hover:bg-fuchsia-950/25"
+                      >
+                        <div className="text-xl">{deity.icon}</div>
+                        <div className="mt-1 text-[11px] font-black tracking-wider text-white/85">{deity.name}</div>
+                        <div className={`mt-1 text-[9px] font-bold ${sameEnvironment ? 'text-fuchsia-100/85' : 'text-white/45'}`}>
+                          {sameEnvironment ? '同环境' : '异环境'}：+{gain} 信仰
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOfferingPickerCardId(null)}
+                  className="mt-4 h-8 rounded-md border border-white/10 bg-white/5 px-4 text-[10px] font-bold tracking-wider text-white/55 hover:text-white/80"
+                >
+                  取消
+                </button>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
       <AnimatePresence>

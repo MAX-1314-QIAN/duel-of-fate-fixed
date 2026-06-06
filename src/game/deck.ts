@@ -3,12 +3,14 @@ import { Card } from '../types';
 export interface RecycleDiscardPilesInput {
   playerDiscardPile: Card[];
   aiDiscardPile: Card[];
+  playerOfferingPile?: Card[];
 }
 
 export interface RecycleDiscardPilesResult {
   recycledDeck: Card[];
   recycledCount: number;
   normalizedMutationCount: number;
+  offeringCount: number;
 }
 
 const shuffleCards = (cards: Card[]) => [...cards].sort(() => Math.random() - 0.5);
@@ -28,8 +30,9 @@ export const normalizeCardForSharedDeck = (card: Card): Card => {
 export const recycleDiscardPilesIntoSharedDeck = ({
   playerDiscardPile,
   aiDiscardPile,
+  playerOfferingPile = [],
 }: RecycleDiscardPilesInput): RecycleDiscardPilesResult => {
-  const cardsToRecycle = [...playerDiscardPile, ...aiDiscardPile];
+  const cardsToRecycle = [...playerDiscardPile, ...aiDiscardPile, ...playerOfferingPile];
   const normalizedMutationCount = cardsToRecycle.filter(card =>
     card.mutationType !== undefined
     || card.forestGrowthStage !== undefined
@@ -41,5 +44,6 @@ export const recycleDiscardPilesIntoSharedDeck = ({
     recycledDeck: shuffleCards(cardsToRecycle.map(normalizeCardForSharedDeck)),
     recycledCount: cardsToRecycle.length,
     normalizedMutationCount,
+    offeringCount: playerOfferingPile.length,
   };
 };

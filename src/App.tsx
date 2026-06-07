@@ -36,6 +36,7 @@ import {
   selectAiMutationCandidate,
 } from './game/environment';
 import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode, getChallengeAiStageConfig, getChallengeStageConfig } from './game/mode';
+import { CHALLENGE_REWARD_CONFIG, STAGE_ITEM_REWARDS, StageItemRewardId, isItemRewardStage } from './game/rewards';
 
 const INITIAL_HP = 10;
 const MAX_HAND = 4;
@@ -76,6 +77,10 @@ type RoutedEnvironmentType = 'VOLCANO' | 'FOREST' | 'GLACIER';
 type StageRewardState = {
   stage: number;
   deityType: DeityType;
+} | null;
+type StageItemRewardState = {
+  stage: number;
+  rewardId: StageItemRewardId;
 } | null;
 
 const ENVIRONMENT_CONFIG_BY_ID = {
@@ -167,6 +172,7 @@ export default function App() {
   const environmentRoundsRemainingRef = useRef(ENVIRONMENT_ROUTE_CONFIG.roundsPerEnvironment);
   const completedClashesSinceMutationRef = useRef(0);
   const claimedStageRewardStagesRef = useRef<Set<number>>(new Set());
+  const claimedItemRewardStagesRef = useRef<Set<number>>(new Set());
   const enemyScorchMarksRef = useRef(0);
   const stageSessionIdRef = useRef(0);
   const battleFrozenRef = useRef(false);
@@ -324,6 +330,32 @@ export default function App() {
     }, duration);
   };
 
+  const absorbPlayerDamageWithShield = (incomingDamage: number) => {
+    if (gameMode !== 'CHALLENGE' || incomingDamage <= 0) {
+      return {
+        hpDamage: incomingDamage,
+        shieldAfter: playerShieldRef.current,
+        absorbed: 0,
+        logs: [] as string[],
+      };
+    }
+
+    const shieldBefore = playerShieldRef.current;
+    const absorbed = Math.min(shieldBefore, incomingDamage);
+    const shieldAfter = shieldBefore - absorbed;
+    const hpDamage = incomingDamage - absorbed;
+    const logs: string[] = [];
+
+    if (absorbed > 0) {
+      logs.push(`[护盾] 吸收 ${absorbed} 点伤害：${shieldBefore} → ${shieldAfter}`);
+      if (hpDamage > 0) {
+        logs.push(`[伤害] 剩余 ${hpDamage} 点伤害扣除玩家生命`);
+      }
+    }
+
+    return { hpDamage, shieldAfter, absorbed, logs };
+  };
+
   const invalidateBattleSession = useCallback(() => {
     stageSessionIdRef.current += 1;
   }, []);
@@ -384,6 +416,10 @@ export default function App() {
   const [faithState, setFaithState] = useState<FaithState>(() => createInitialFaithState());
   const [playerDewdrops, setPlayerDewdrops] = useState(0);
   const [playerFrostSigils, setPlayerFrostSigils] = useState(0);
+  const [playerMaxHp, setPlayerMaxHp] = useState(CHALLENGE_REWARD_CONFIG.basePlayerMaxHp);
+  const [playerShield, setPlayerShield] = useState(CHALLENGE_REWARD_CONFIG.basePlayerShield);
+  const [playerHandLimit, setPlayerHandLimit] = useState(CHALLENGE_REWARD_CONFIG.basePlayerHandLimit);
+  const [hasClaimedHandSlotReward, setHasClaimedHandSlotReward] = useState(false);
   const [offeringPickerCardId, setOfferingPickerCardId] = useState<string | null>(null);
   const [hasOfferedThisClash, setHasOfferedThisClash] = useState(false);
   const [hasUsedDeitySkillThisClash, setHasUsedDeitySkillThisClash] = useState(false);
@@ -393,6 +429,7 @@ export default function App() {
   const [enemyScorchMarks, setEnemyScorchMarks] = useState(0);
   const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'fuel' | 'ember' | 'core' | 'combustion'; damage?: number; coreDamage?: number; token: number } | null>(null);
   const [selectedStageReward, setSelectedStageReward] = useState<StageRewardState>(null);
+  const [selectedStageItemReward, setSelectedStageItemReward] = useState<StageItemRewardState>(null);
   const [challengeStageClear, setChallengeStageClear] = useState<{
     completedStage: number;
     nextStage: number;
@@ -409,6 +446,9 @@ export default function App() {
   const homeLogContainerRef = useRef<HTMLDivElement>(null);
   const playerDewdropsRef = useRef(0);
   const playerFrostSigilsRef = useRef(0);
+  const playerMaxHpRef = useRef(CHALLENGE_REWARD_CONFIG.basePlayerMaxHp);
+  const playerShieldRef = useRef(CHALLENGE_REWARD_CONFIG.basePlayerShield);
+  const playerHandLimitRef = useRef(CHALLENGE_REWARD_CONFIG.basePlayerHandLimit);
 
   useEffect(() => {
     playerDewdropsRef.current = playerDewdrops;
@@ -417,6 +457,18 @@ export default function App() {
   useEffect(() => {
     playerFrostSigilsRef.current = playerFrostSigils;
   }, [playerFrostSigils]);
+
+  useEffect(() => {
+    playerMaxHpRef.current = playerMaxHp;
+  }, [playerMaxHp]);
+
+  useEffect(() => {
+    playerShieldRef.current = playerShield;
+  }, [playerShield]);
+
+  useEffect(() => {
+    playerHandLimitRef.current = playerHandLimit;
+  }, [playerHandLimit]);
 
   useEffect(() => {
     if (homeLogContainerRef.current) {
@@ -506,9 +558,10 @@ export default function App() {
     let tempDraw = [...pDraw];
     const logEntries: string[] = [];
 
-    // Player draws up to Math.min(2, MAX_HAND - current hand size)
+    // Player draws up to Math.min(2, player hand limit - current hand size)
     const pDrawnCards: Card[] = [];
-    const pDrawCount = Math.min(2, Math.max(0, MAX_HAND - newPHand.length));
+    const currentPlayerHandLimit = gameMode === 'CHALLENGE' ? playerHandLimitRef.current : MAX_HAND;
+    const pDrawCount = Math.min(2, Math.max(0, currentPlayerHandLimit - newPHand.length));
 
     for (let i = 0; i < pDrawCount; i++) {
       if (tempDraw.length > 0) {
@@ -548,7 +601,7 @@ export default function App() {
       aDrawnCards,
       logEntries,
     };
-  }, []);
+  }, [gameMode]);
 
   const recycleSharedDeckIfPossible = useCallback((snapshot: GameState) => {
     const playerDiscardCount = snapshot.playerDiscardPile.length;
@@ -632,11 +685,19 @@ export default function App() {
     setGameMode(mode);
     setCurrentChallengeStage(1);
     claimedStageRewardStagesRef.current.clear();
+    claimedItemRewardStagesRef.current.clear();
     setFaithState(createInitialFaithState());
     playerDewdropsRef.current = 0;
     setPlayerDewdrops(0);
     playerFrostSigilsRef.current = 0;
     setPlayerFrostSigils(0);
+    playerMaxHpRef.current = CHALLENGE_REWARD_CONFIG.basePlayerMaxHp;
+    playerShieldRef.current = CHALLENGE_REWARD_CONFIG.basePlayerShield;
+    playerHandLimitRef.current = CHALLENGE_REWARD_CONFIG.basePlayerHandLimit;
+    setPlayerMaxHp(CHALLENGE_REWARD_CONFIG.basePlayerMaxHp);
+    setPlayerShield(CHALLENGE_REWARD_CONFIG.basePlayerShield);
+    setPlayerHandLimit(CHALLENGE_REWARD_CONFIG.basePlayerHandLimit);
+    setHasClaimedHandSlotReward(false);
     setOfferingPickerCardId(null);
     setHasOfferedThisClash(false);
     setHasUsedDeitySkillThisClash(false);
@@ -647,6 +708,7 @@ export default function App() {
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
     setSelectedStageReward(null);
+    setSelectedStageItemReward(null);
     setChallengeStageClear(null);
     setChallengeStageNotice(null);
     setState(nextState);
@@ -861,6 +923,11 @@ export default function App() {
       showShortNotice('请先选择一项神明赐福');
       return;
     }
+    const requiresItemReward = isItemRewardStage(challengeStageClear.completedStage);
+    if (requiresItemReward && selectedStageItemReward?.stage !== challengeStageClear.completedStage) {
+      showShortNotice('请先选择一项战利品');
+      return;
+    }
 
     invalidateBattleSession();
     clearPendingBattleTimers();
@@ -885,6 +952,21 @@ export default function App() {
     }
     battleFrozenRef.current = false;
     let deckSnapshot = snapshot;
+    const nextPlayerHand = [...deckSnapshot.playerHand];
+    const playerStageNeed = Math.max(0, playerHandLimitRef.current - nextPlayerHand.length);
+    for (let i = 0; i < playerStageNeed; i += 1) {
+      if (deckSnapshot.drawPile.length <= 0) {
+        const recycle = tryRecycleSharedDeckState(deckSnapshot);
+        deckSnapshot = recycle.state;
+        if (!recycle.recycled || deckSnapshot.drawPile.length <= 0) break;
+      }
+      const [drawnCard, ...remainingDeck] = deckSnapshot.drawPile;
+      nextPlayerHand.push(drawnCard);
+      deckSnapshot = {
+        ...deckSnapshot,
+        drawPile: remainingDeck,
+      };
+    }
     const nextAiHand: Card[] = [];
     for (let i = 0; i < MAX_HAND; i += 1) {
       if (deckSnapshot.drawPile.length <= 0) {
@@ -906,6 +988,7 @@ export default function App() {
     const nextState: GameState = {
       ...deckSnapshot,
       aiHP: nextAiHP,
+      playerHand: nextPlayerHand,
       aiHand: nextAiHand,
       drawPile: nextDrawPile,
       homePlayed: [],
@@ -929,6 +1012,7 @@ export default function App() {
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
     setSelectedStageReward(null);
+    setSelectedStageItemReward(null);
     setIsProcessing(false);
     setSettlementSubPhase(null);
     setClashResult(null);
@@ -949,7 +1033,7 @@ export default function App() {
     scheduleSettlementTimer(() => {
       setChallengeStageNotice(null);
     }, 900);
-  }, [challengeStageClear, clearPendingBattleTimers, clearTransientBattleVisuals, invalidateBattleSession, scheduleSettlementTimer, selectedStageReward, showMutationPhaseNotice, tryRecycleSharedDeckState]);
+  }, [challengeStageClear, clearPendingBattleTimers, clearTransientBattleVisuals, invalidateBattleSession, scheduleSettlementTimer, selectedStageItemReward, selectedStageReward, showMutationPhaseNotice, tryRecycleSharedDeckState]);
 
   const claimStageFaithReward = (deityType: DeityType) => {
     if (gameMode !== 'CHALLENGE' || !challengeStageClear) return;
@@ -989,6 +1073,58 @@ export default function App() {
         ? [`[神明] ${deity.name}升级：Lv.${levelBefore} → Lv.${levelAfter}`]
         : []),
     ]);
+  };
+
+  const claimStageItemReward = (rewardId: StageItemRewardId) => {
+    if (gameMode !== 'CHALLENGE' || !challengeStageClear) return;
+    const completedStage = challengeStageClear.completedStage;
+    if (!isItemRewardStage(completedStage)) return;
+    if (selectedStageItemReward?.stage === completedStage || claimedItemRewardStagesRef.current.has(completedStage)) return;
+    const reward = STAGE_ITEM_REWARDS.find(item => item.id === rewardId);
+    if (!reward) return;
+
+    if (rewardId === 'HAND_SLOT' && hasClaimedHandSlotReward) {
+      showShortNotice('本轮挑战已获得手牌扩容');
+      return;
+    }
+
+    const rewardLogs = [`[奖励] 获得“${reward.name}”`];
+
+    if (rewardId === 'HAND_SLOT') {
+      const before = playerHandLimitRef.current;
+      const after = before + CHALLENGE_REWARD_CONFIG.handSlotBonus;
+      playerHandLimitRef.current = after;
+      setPlayerHandLimit(after);
+      setHasClaimedHandSlotReward(true);
+      rewardLogs.push(`[成长] 玩家手牌槽位：${before} → ${after}`);
+    } else if (rewardId === 'MAX_HP') {
+      const maxHpBefore = playerMaxHpRef.current;
+      const maxHpAfter = maxHpBefore + CHALLENGE_REWARD_CONFIG.maxHpBonus;
+      const hpBefore = stateRef.current.playerHP;
+      const hpAfter = Math.min(maxHpAfter, hpBefore + CHALLENGE_REWARD_CONFIG.maxHpBonus);
+      const nextState = {
+        ...stateRef.current,
+        playerHP: hpAfter,
+      };
+      playerMaxHpRef.current = maxHpAfter;
+      setPlayerMaxHp(maxHpAfter);
+      stateRef.current = nextState;
+      setState(nextState);
+      setChallengeStageClear(prev => prev ? { ...prev, playerHP: hpAfter } : prev);
+      rewardLogs.push(`[成长] 玩家最大生命：${maxHpBefore} → ${maxHpAfter}`);
+      rewardLogs.push(`[恢复] 玩家生命：${hpBefore} → ${hpAfter}`);
+    } else if (rewardId === 'SHIELD_CHARGE') {
+      const shieldBefore = playerShieldRef.current;
+      const shieldAfter = CHALLENGE_REWARD_CONFIG.shieldLimit;
+      playerShieldRef.current = shieldAfter;
+      setPlayerShield(shieldAfter);
+      rewardLogs.push(`[护盾] 玩家护盾：${shieldBefore} → ${shieldAfter}`);
+    }
+
+    setSelectedStageItemReward({ stage: completedStage, rewardId });
+    claimedItemRewardStagesRef.current.add(completedStage);
+    showShortNotice(`已获得：${reward.icon} ${reward.name}`, 900);
+    setLogs(prev => [...prev, ...rewardLogs]);
   };
 
   const finishMutationStage = useCallback((playerCardId?: string) => {
@@ -1239,7 +1375,9 @@ export default function App() {
     const baseDamageToGuest = baseHomeDamage;
     const volcanoDamageToGuest = homeVolcanoBonus;
     const resonanceDamageToGuest = homeResonanceBonus;
-    const playerDamage = playerRoleAtClash === 'HOME' ? hDamage : gDamage;
+    const playerIncomingDamage = playerRoleAtClash === 'HOME' ? hDamage : gDamage;
+    const playerShieldAbsorb = absorbPlayerDamageWithShield(playerIncomingDamage);
+    const playerDamage = playerShieldAbsorb.hpDamage;
     const aiDamage = aiRoleAtClash === 'HOME' ? hDamage : gDamage;
     const playerBaseDamage = playerRoleAtClash === 'HOME' ? baseDamageToHome : baseDamageToGuest;
     const aiBaseDamage = aiRoleAtClash === 'HOME' ? baseDamageToHome : baseDamageToGuest;
@@ -1255,10 +1393,10 @@ export default function App() {
       : guestResonanceBonus > 0;
     const homeInitialHP = playerRoleAtClash === 'HOME' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
     const guestInitialHP = playerRoleAtClash === 'GUEST' ? clashSnapshot.playerHP : clashSnapshot.aiHP;
-    const homeMaxHP = playerRoleAtClash === 'HOME' ? INITIAL_HP : currentAiMaxHP;
-    const guestMaxHP = playerRoleAtClash === 'GUEST' ? INITIAL_HP : currentAiMaxHP;
-    const homeHpAfterDamage = Math.max(0, homeInitialHP - hDamage);
-    const guestHpAfterDamage = Math.max(0, guestInitialHP - gDamage);
+    const homeMaxHP = playerRoleAtClash === 'HOME' ? playerMaxHpRef.current : currentAiMaxHP;
+    const guestMaxHP = playerRoleAtClash === 'GUEST' ? playerMaxHpRef.current : currentAiMaxHP;
+    const homeHpAfterDamage = Math.max(0, homeInitialHP - (playerRoleAtClash === 'HOME' ? playerDamage : hDamage));
+    const guestHpAfterDamage = Math.max(0, guestInitialHP - (playerRoleAtClash === 'GUEST' ? playerDamage : gDamage));
     const homeMatureForestHits = finalHomeAttack.filter(isMatureForestCard).length;
     const guestMatureForestHits = guestDamagingCards.filter(isMatureForestCard).length;
     const homePlayedMatureForestCards = hCards.filter(isMatureForestCard).length;
@@ -1299,7 +1437,7 @@ export default function App() {
     const playerForestOverflowRecovery = Math.max(0, playerTheoreticalForestRecovery - playerForestRecovery);
     const playerHpAfterDamage = Math.max(0, clashSnapshot.playerHP - playerDamage);
     const aiHpAfterDamage = Math.max(0, clashSnapshot.aiHP - aiDamage);
-    const resolvedPlayerHP = Math.min(INITIAL_HP, playerHpAfterDamage + playerForestRecovery);
+    const resolvedPlayerHP = Math.min(playerMaxHpRef.current, playerHpAfterDamage + playerForestRecovery);
     const resolvedAiHP = Math.min(currentAiMaxHP, aiHpAfterDamage + aiForestRecovery);
     const canGenerateDewdrops =
       gameMode === 'CHALLENGE'
@@ -1315,13 +1453,13 @@ export default function App() {
       && faithState.DEER_SPIRIT.level >= 1
       && playerDamage > 0
       && resolvedPlayerHP > 0
-      && resolvedPlayerHP < INITIAL_HP
+      && resolvedPlayerHP < playerMaxHpRef.current
       && dewdropsAfterGain > 0;
     const dewdropHeal = canAutoHealWithDewdrop
-      ? Math.min(DEER_SPIRIT_CONFIG.autoHealPerClash, dewdropsAfterGain, INITIAL_HP - resolvedPlayerHP)
+      ? Math.min(DEER_SPIRIT_CONFIG.autoHealPerClash, dewdropsAfterGain, playerMaxHpRef.current - resolvedPlayerHP)
       : 0;
     const dewdropsAfterAutoHeal = dewdropsAfterGain - dewdropHeal;
-    const settledPlayerHP = Math.min(INITIAL_HP, resolvedPlayerHP + dewdropHeal);
+    const settledPlayerHP = Math.min(playerMaxHpRef.current, resolvedPlayerHP + dewdropHeal);
     const forestMutationCountdownReduction =
       homeForestRecovery.symbiosisTriggered || guestForestRecovery.symbiosisTriggered
         ? 1
@@ -1364,9 +1502,12 @@ export default function App() {
       appendDamageBreakdownLogs(aiBaseDamage, aiVolcanoDamage, aiResonanceDamage, aiDamage, aiRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
       resultLogs.push(zhCN.logs.aiDamage(aiDamage));
     }
-    if (playerDamage > 0) {
-      appendDamageBreakdownLogs(playerBaseDamage, playerVolcanoDamage, playerResonanceDamage, playerDamage, playerRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
-      resultLogs.push(zhCN.logs.playerDamage(playerDamage));
+    if (playerIncomingDamage > 0) {
+      appendDamageBreakdownLogs(playerBaseDamage, playerVolcanoDamage, playerResonanceDamage, playerIncomingDamage, playerRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
+      resultLogs.push(...playerShieldAbsorb.logs);
+      if (playerDamage > 0) {
+        resultLogs.push(zhCN.logs.playerDamage(playerDamage));
+      }
     }
     if (playerForestRecovery > 0) {
       resultLogs.push('[森林恢复] 成熟森林牌成功命中');
@@ -1592,6 +1733,10 @@ export default function App() {
             setDewdropFeedback(null);
           }, 760);
         }, dewdropsGained > 0 ? 640 : 220);
+      }
+      if (playerShieldAbsorb.absorbed > 0) {
+        playerShieldRef.current = playerShieldAbsorb.shieldAfter;
+        setPlayerShield(playerShieldAbsorb.shieldAfter);
       }
       setState(prev => ({
         ...prev,
@@ -1893,7 +2038,8 @@ export default function App() {
         }
       }
 
-      const playerNeed = Math.min(2, Math.max(0, MAX_HAND - latest.playerHand.length));
+      const currentPlayerHandLimit = gameMode === 'CHALLENGE' ? playerHandLimitRef.current : MAX_HAND;
+      const playerNeed = Math.min(2, Math.max(0, currentPlayerHandLimit - latest.playerHand.length));
       const aiNeed = Math.min(2, Math.max(0, MAX_HAND - latest.aiHand.length));
       const deckCount = latest.drawPile.length;
       const totalNeed = playerNeed + aiNeed;
@@ -2627,7 +2773,7 @@ export default function App() {
       return;
     }
 
-    const playerMaxHP = INITIAL_HP;
+    const playerMaxHP = gameMode === 'CHALLENGE' ? playerMaxHpRef.current : INITIAL_HP;
     const isVerdantSurge = faithState.DEER_SPIRIT.level >= 4 && !hasTriggeredVerdantSurgeThisEnemy;
     const safeHpLine = Math.ceil(
       playerMaxHP * (isVerdantSurge ? DEER_SPIRIT_CONFIG.surgeSafeHpRatio : DEER_SPIRIT_CONFIG.chargeSafeHpRatio)
@@ -2974,7 +3120,8 @@ export default function App() {
   const antlerChargeMaxHpCost = canUseVerdantSurge
     ? DEER_SPIRIT_CONFIG.surgeMaxHpCost
     : DEER_SPIRIT_CONFIG.chargeMaxHpCost;
-  const deerChargeSafeHpLine = Math.ceil(INITIAL_HP * antlerChargeSafeHpRatio);
+  const activePlayerMaxHp = gameMode === 'CHALLENGE' ? playerMaxHp : INITIAL_HP;
+  const deerChargeSafeHpLine = Math.ceil(activePlayerMaxHp * antlerChargeSafeHpRatio);
   const maxAntlerChargeHpCost = Math.min(
     antlerChargeMaxHpCost,
     Math.max(0, state.playerHP - deerChargeSafeHpLine)
@@ -3415,19 +3562,25 @@ export default function App() {
           <div className="w-full h-3 bg-[#222] rounded-full overflow-hidden border border-[#333]">
             <motion.div 
               initial={false}
-              animate={{ width: `${(state.playerHP / INITIAL_HP) * 100}%` }}
+              animate={{ width: `${(state.playerHP / activePlayerMaxHp) * 100}%` }}
               className="h-full hp-bar-gradient-player"
             />
           </div>
           <div className="flex justify-between mt-1 items-center font-mono opacity-80">
             <span className="text-sm">
-              {state.playerHP}/{INITIAL_HP}
+              {state.playerHP}/{activePlayerMaxHp}
               {forestRecoveryFeedback?.recoveryByTarget.PLAYER ? (
                 <span className="ml-2 text-[11px] font-black text-emerald-300 drop-shadow-[0_0_7px_rgba(52,211,153,0.55)]">+{forestRecoveryFeedback.recoveryByTarget.PLAYER}</span>
               ) : null}
             </span>
             <span className="text-[10px]">生命</span>
           </div>
+          {gameMode === 'CHALLENGE' && (
+            <div className="mt-1 flex justify-between text-[9px] font-mono font-bold text-white/48">
+              <span>{`护盾：${playerShield} / ${CHALLENGE_REWARD_CONFIG.shieldLimit}`}</span>
+              <span>{`手牌槽：${playerHandLimit}`}</span>
+            </div>
+          )}
           <AnimatePresence>
             {burnFeedback?.targets.includes('PLAYER') && (
               <motion.div
@@ -3671,7 +3824,11 @@ export default function App() {
               <div className="w-[420px] rounded-xl border border-fuchsia-400/25 bg-[#100b14]/92 px-6 py-5 text-left shadow-[0_0_28px_rgba(217,70,239,0.10)]">
                 <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
                   <span className="text-text-dim">当前生命</span>
-                  <span className="font-black text-white">{challengeStageClear.playerHP} / {INITIAL_HP}</span>
+                  <span className="font-black text-white">{challengeStageClear.playerHP} / {playerMaxHp}</span>
+                </div>
+                <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
+                  <span className="text-text-dim">护盾 / 手牌槽</span>
+                  <span className="font-black text-white">{playerShield} / {CHALLENGE_REWARD_CONFIG.shieldLimit} · {playerHandLimit}</span>
                 </div>
                 <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
                   <span className="text-text-dim">保留手牌</span>
@@ -3723,12 +3880,61 @@ export default function App() {
                     )}
                   </div>
                 )}
+                {isItemRewardStage(challengeStageClear.completedStage) && (
+                  <div className="mt-4 border-t border-cyan-300/12 pt-4">
+                    <div className="text-center text-[10px] font-black tracking-widest text-cyan-100/75">
+                      选择一项战利品
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {STAGE_ITEM_REWARDS.map(reward => {
+                        const isClaimed = selectedStageItemReward?.stage === challengeStageClear.completedStage;
+                        const isSelected = isClaimed && selectedStageItemReward?.rewardId === reward.id;
+                        const disabled = isClaimed || (reward.id === 'HAND_SLOT' && hasClaimedHandSlotReward);
+                        const hint = reward.id === 'HAND_SLOT' && hasClaimedHandSlotReward
+                          ? '本轮挑战已获得手牌扩容'
+                          : reward.id === 'SHIELD_CHARGE' && playerShield >= CHALLENGE_REWARD_CONFIG.shieldLimit
+                            ? '当前护盾已满'
+                            : undefined;
+                        return (
+                          <button
+                            key={reward.id}
+                            type="button"
+                            onClick={() => claimStageItemReward(reward.id)}
+                            disabled={disabled}
+                            title={hint}
+                            className={`rounded-lg border px-2 py-2 text-center transition-all
+                              ${isSelected
+                                ? 'border-cyan-200/55 bg-cyan-950/45 text-cyan-50 shadow-[0_0_14px_rgba(34,211,238,0.16)]'
+                                : 'border-white/10 bg-black/24 text-white/78 hover:border-cyan-200/35 hover:bg-cyan-950/25'
+                              }
+                              ${disabled && !isSelected ? 'opacity-35 cursor-not-allowed' : ''}
+                            `}
+                          >
+                            <div className="text-xl leading-none">{reward.icon}</div>
+                            <div className="mt-1 text-[11px] font-black tracking-wider">{reward.name}</div>
+                            <div className="mt-1 min-h-[24px] text-[8px] font-bold leading-tight text-cyan-100/70">{reward.description}</div>
+                            {hint && <div className="mt-1 text-[7px] font-bold text-cyan-100/45">{hint}</div>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectedStageItemReward?.stage === challengeStageClear.completedStage && (
+                      <div className="mt-3 rounded-md border border-cyan-300/18 bg-cyan-950/22 px-3 py-2 text-center text-[10px] font-bold tracking-wider text-cyan-100/80">
+                        已获得：{STAGE_ITEM_REWARDS.find(reward => reward.id === selectedStageItemReward.rewardId)?.icon} {STAGE_ITEM_REWARDS.find(reward => reward.id === selectedStageItemReward.rewardId)?.name}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 onClick={proceedToNextChallengeStage}
-                aria-disabled={challengeStageClear.completedStage <= 2 && selectedStageReward?.stage !== challengeStageClear.completedStage}
+                aria-disabled={
+                  (challengeStageClear.completedStage <= 2 && selectedStageReward?.stage !== challengeStageClear.completedStage)
+                  || (isItemRewardStage(challengeStageClear.completedStage) && selectedStageItemReward?.stage !== challengeStageClear.completedStage)
+                }
                 className={`mt-6 w-[280px] py-3 px-8 rounded-lg font-bold uppercase tracking-widest transition-all
-                  ${challengeStageClear.completedStage <= 2 && selectedStageReward?.stage !== challengeStageClear.completedStage
+                  ${(challengeStageClear.completedStage <= 2 && selectedStageReward?.stage !== challengeStageClear.completedStage)
+                    || (isItemRewardStage(challengeStageClear.completedStage) && selectedStageItemReward?.stage !== challengeStageClear.completedStage)
                     ? 'bg-zinc-800/45 text-text-dim/35 border border-zinc-700/40 cursor-pointer hover:border-fuchsia-300/20'
                     : 'bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] cursor-pointer'
                   }

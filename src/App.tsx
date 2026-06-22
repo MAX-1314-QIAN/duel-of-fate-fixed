@@ -12,6 +12,7 @@ import {
   DEER_SPIRIT_CONFIG,
   FROST_LORD_CONFIG,
   FaithState,
+  FAITH_LEVEL_THRESHOLDS,
   KITCHEN_GOD_CONFIG,
   createInitialFaithState,
   getFaithLevel,
@@ -37,6 +38,7 @@ import {
 } from './game/environment';
 import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode, getChallengeAiStageConfig, getChallengeStageConfig } from './game/mode';
 import { CHALLENGE_REWARD_CONFIG, STAGE_ITEM_REWARDS, StageItemRewardId, isItemRewardStage } from './game/rewards';
+import { DEV_TOOLS_CONFIG, DEV_TOOLS_ENABLED } from './game/dev';
 
 const INITIAL_HP = 10;
 const MAX_HAND = 4;
@@ -200,6 +202,7 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [settlementSubPhase, setSettlementSubPhase] = useState<'resolving' | 'move-to-discard' | 'replenishing' | 'replenish-complete' | 'round-end' | null>(null);
   const [isBattleLogOpen, setIsBattleLogOpen] = useState(false);
+  const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [logs, setLogs] = useState<string[]>([
     zhCN.logs.battleInitialized,
     '[环境路线] 当前环境：火山',
@@ -401,6 +404,7 @@ export default function App() {
     setDefenseLimitNotice(null);
     setShakingCardIds({});
     setShortNotice(null);
+    setIsDevPanelOpen(false);
     setEnvironmentSwitchNotice(null);
     setChallengeStageNotice(null);
     setOfferingPickerCardId(null);
@@ -769,6 +773,7 @@ export default function App() {
     setSharedDeckTransit(null);
     setSharedDeckScale(false);
     setActiveAnims([]);
+    setIsDevPanelOpen(false);
     setLogs(mode === 'QUICK'
       ? [
           zhCN.logs.reset,
@@ -1125,6 +1130,105 @@ export default function App() {
     claimedItemRewardStagesRef.current.add(completedStage);
     showShortNotice(`已获得：${reward.icon} ${reward.name}`, 900);
     setLogs(prev => [...prev, ...rewardLogs]);
+  };
+
+  const completeFinalChallengeVictoryForDev = (snapshot: GameState) => {
+    invalidateBattleSession();
+    battleFrozenRef.current = true;
+    clearPendingBattleTimers();
+    clearTransientBattleVisuals();
+    enemyScorchMarksRef.current = 0;
+    setEnemyScorchMarks(0);
+    setScorchFeedback(null);
+    setHasTriggeredCoreCombustionThisEnemy(false);
+    setHasTriggeredVerdantSurgeThisEnemy(false);
+    setHasTriggeredBlizzardThisEnemy(false);
+    const finalState: GameState = {
+      ...snapshot,
+      aiHP: 0,
+      phase: 'GAME_OVER',
+      homePlayed: [],
+      guestPlayed: [],
+      winner: 'PLAYER',
+    };
+    stateRef.current = finalState;
+    setState(finalState);
+    setLogs(prev => [
+      ...prev,
+      `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+      '[挑战模式] 挑战通关',
+    ]);
+    setIsProcessing(false);
+    setSettlementSubPhase(null);
+    setClashResult(null);
+  };
+
+  const devDefeatCurrentAi = () => {
+    if (gameMode !== 'CHALLENGE' || state.winner) return;
+    const snapshot: GameState = {
+      ...stateRef.current,
+      aiHP: 0,
+    };
+    stateRef.current = snapshot;
+    setState(snapshot);
+    setLogs(prev => [...prev, '[开发者] 当前 AI 已被击败']);
+
+    if (currentChallengeStage < CHALLENGE_STAGE_CONFIG.totalStages) {
+      enterChallengeStageClear(snapshot);
+      return;
+    }
+
+    completeFinalChallengeVictoryForDev(snapshot);
+  };
+
+  const devFillPlayerHealth = () => {
+    if (gameMode !== 'CHALLENGE') return;
+    const nextState: GameState = {
+      ...stateRef.current,
+      playerHP: playerMaxHpRef.current,
+    };
+    stateRef.current = nextState;
+    setState(nextState);
+    setChallengeStageClear(prev => prev ? { ...prev, playerHP: playerMaxHpRef.current } : prev);
+    setLogs(prev => [...prev, '[开发者] 玩家生命已补满']);
+  };
+
+  const devFillPlayerShield = () => {
+    if (gameMode !== 'CHALLENGE') return;
+    playerShieldRef.current = CHALLENGE_REWARD_CONFIG.shieldLimit;
+    setPlayerShield(CHALLENGE_REWARD_CONFIG.shieldLimit);
+    setLogs(prev => [...prev, '[开发者] 玩家护盾已充满']);
+  };
+
+  const devMaxAllDeities = () => {
+    if (gameMode !== 'CHALLENGE') return;
+    const faithForLv4 = FAITH_LEVEL_THRESHOLDS[4];
+    setFaithState({
+      KITCHEN_GOD: { faith: faithForLv4, level: getFaithLevel(faithForLv4) },
+      DEER_SPIRIT: { faith: faithForLv4, level: getFaithLevel(faithForLv4) },
+      FROST_LORD: { faith: faithForLv4, level: getFaithLevel(faithForLv4) },
+    });
+    setLogs(prev => [...prev, '[开发者] 三位神明已提升至 Lv.4']);
+  };
+
+  const devClaimCurrentReward = () => {
+    if (gameMode !== 'CHALLENGE' || !challengeStageClear) return;
+    const completedStage = challengeStageClear.completedStage;
+
+    if (completedStage <= 2) {
+      if (selectedStageReward?.stage === completedStage || claimedStageRewardStagesRef.current.has(completedStage)) return;
+      claimStageFaithReward(DEITY_ORDER[0]);
+      setLogs(prev => [...prev, '[开发者] 已自动领取当前奖励']);
+      return;
+    }
+
+    if (isItemRewardStage(completedStage)) {
+      if (selectedStageItemReward?.stage === completedStage || claimedItemRewardStagesRef.current.has(completedStage)) return;
+      const reward = STAGE_ITEM_REWARDS.find(item => item.id !== 'HAND_SLOT' || !hasClaimedHandSlotReward);
+      if (!reward) return;
+      claimStageItemReward(reward.id);
+      setLogs(prev => [...prev, '[开发者] 已自动领取当前奖励']);
+    }
   };
 
   const finishMutationStage = useCallback((playerCardId?: string) => {
@@ -3740,6 +3844,64 @@ export default function App() {
           </AnimatePresence>
         </div>
       </div>
+
+      {DEV_TOOLS_ENABLED && DEV_TOOLS_CONFIG.showPanel && gameMode === 'CHALLENGE' && (
+        <div className="absolute left-4 top-24 z-[75] font-mono">
+          <button
+            type="button"
+            onClick={() => setIsDevPanelOpen(prev => !prev)}
+            className="rounded-md border border-cyan-300/30 bg-black/70 px-3 py-1.5 text-[10px] font-black tracking-widest text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.12)] hover:border-cyan-200/55 hover:bg-cyan-950/55 active:scale-95"
+          >
+            🧪 Dev
+          </button>
+          {isDevPanelOpen && (
+            <div className="mt-2 w-[168px] rounded-lg border border-cyan-300/20 bg-[#061521]/94 p-2 shadow-[0_0_22px_rgba(34,211,238,0.14)]">
+              <div className="mb-2 text-center text-[9px] font-black tracking-widest text-cyan-100/65">
+                CHALLENGE DEV
+              </div>
+              <div className="grid gap-1.5">
+                <button
+                  type="button"
+                  onClick={devDefeatCurrentAi}
+                  disabled={Boolean(challengeStageClear) || state.winner !== null}
+                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30 disabled:opacity-35 disabled:cursor-not-allowed"
+                >
+                  击败当前 AI
+                </button>
+                <button
+                  type="button"
+                  onClick={devFillPlayerHealth}
+                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
+                >
+                  补满生命
+                </button>
+                <button
+                  type="button"
+                  onClick={devFillPlayerShield}
+                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
+                >
+                  护盾充满
+                </button>
+                <button
+                  type="button"
+                  onClick={devMaxAllDeities}
+                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
+                >
+                  三神满级
+                </button>
+                <button
+                  type="button"
+                  onClick={devClaimCurrentReward}
+                  disabled={!challengeStageClear}
+                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30 disabled:opacity-35 disabled:cursor-not-allowed"
+                >
+                  奖励测试
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Arena */}
       <div className="flex-1 flex flex-col items-center justify-center gap-4 relative">

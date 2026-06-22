@@ -1,3 +1,5 @@
+import { CHALLENGE_AI_HP_BY_STAGE } from './balance';
+
 export type GameMode = 'QUICK' | 'CHALLENGE';
 
 export type ChallengeAiProfile =
@@ -37,43 +39,43 @@ export const CHALLENGE_STAGE_CONFIG = {
     1: {
       label: '新手关',
       note: '第 1 关：新手关',
-      aiHp: 10,
+      aiHp: CHALLENGE_AI_HP_BY_STAGE[1],
       aiProfile: 'BEGINNER',
     },
     2: {
       label: '基础关',
       note: '第 2 关：基础关',
-      aiHp: 10,
+      aiHp: CHALLENGE_AI_HP_BY_STAGE[2],
       aiProfile: 'BASIC',
     },
     3: {
       label: '标准难度关',
       note: '第 3 关：标准难度关',
-      aiHp: 15,
+      aiHp: CHALLENGE_AI_HP_BY_STAGE[3],
       aiProfile: 'STANDARD',
     },
     4: {
       label: '中期压力关',
       note: '第 4 关：中期压力关',
-      aiHp: 15,
+      aiHp: CHALLENGE_AI_HP_BY_STAGE[4],
       aiProfile: 'STANDARD_PLUS',
     },
     5: {
       label: '构筑缓冲关',
       note: '第 5 关：构筑缓冲关；高 HP 用于延长战斗，提供更多感染、奉纳和神明构筑机会',
-      aiHp: 20,
+      aiHp: CHALLENGE_AI_HP_BY_STAGE[5],
       aiProfile: 'BUILD_BUFFER',
     },
     6: {
       label: '后期精英关',
       note: '第 6 关：后期精英关',
-      aiHp: 18,
+      aiHp: CHALLENGE_AI_HP_BY_STAGE[6],
       aiProfile: 'ELITE',
     },
     7: {
       label: '最终首领占位',
       note: '第 7 关：最终首领占位',
-      aiHp: 20,
+      aiHp: CHALLENGE_AI_HP_BY_STAGE[7],
       aiProfile: 'BOSS_PLACEHOLDER',
     },
   } satisfies Record<number, {

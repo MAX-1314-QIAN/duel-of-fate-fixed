@@ -1,3 +1,5 @@
+import { ACTIVE_BALANCE_CONFIG } from './balance';
+
 export type StageItemRewardId = 'HAND_SLOT' | 'MAX_HP' | 'SHIELD_CHARGE';
 
 export interface StageItemRewardConfig {
@@ -8,10 +10,10 @@ export interface StageItemRewardConfig {
 }
 
 export const CHALLENGE_REWARD_CONFIG = {
-  basePlayerMaxHp: 10,
-  basePlayerShield: 0,
+  basePlayerMaxHp: ACTIVE_BALANCE_CONFIG.playerInitialMaxHp,
+  basePlayerShield: ACTIVE_BALANCE_CONFIG.playerInitialShield,
   shieldLimit: 12,
-  basePlayerHandLimit: 4,
+  basePlayerHandLimit: ACTIVE_BALANCE_CONFIG.playerBaseHandLimit,
   handSlotBonus: 1,
   maxHpBonus: 5,
   itemRewardFirstStage: 3,

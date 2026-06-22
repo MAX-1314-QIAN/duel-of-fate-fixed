@@ -39,10 +39,12 @@ import {
 import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode, getChallengeAiStageConfig, getChallengeStageConfig } from './game/mode';
 import { CHALLENGE_REWARD_CONFIG, STAGE_ITEM_REWARDS, StageItemRewardId, isItemRewardStage } from './game/rewards';
 import { DEV_TOOLS_CONFIG, DEV_TOOLS_ENABLED } from './game/dev';
+import { ACTIVE_BALANCE_CONFIG, SHARED_DECK_CARD_TYPES } from './game/balance';
 
-const INITIAL_HP = 10;
-const MAX_HAND = 4;
-const CARD_TYPES: CardType[] = ['ROCK', 'PAPER', 'SCISSORS'];
+const INITIAL_HP = ACTIVE_BALANCE_CONFIG.playerInitialMaxHp;
+const PLAYER_BASE_HAND_LIMIT = ACTIVE_BALANCE_CONFIG.playerBaseHandLimit;
+const AI_BASE_HAND_LIMIT = ACTIVE_BALANCE_CONFIG.aiBaseHandLimit;
+const CARD_TYPES: CardType[] = SHARED_DECK_CARD_TYPES;
 const CARD_NAME_ZH: Record<CardType, string> = {
   ROCK: '石头',
   PAPER: '布',
@@ -56,10 +58,10 @@ const createCard = (type?: CardType): Card => ({
 
 const createDeck = (): Card[] => {
   const pool: Card[] = [];
-  for (let i = 0; i < 10; i++) {
-    pool.push(createCard('ROCK'));
-    pool.push(createCard('PAPER'));
-    pool.push(createCard('SCISSORS'));
+  for (let i = 0; i < ACTIVE_BALANCE_CONFIG.sharedDeckCopiesPerCardType; i++) {
+    CARD_TYPES.forEach(type => {
+      pool.push(createCard(type));
+    });
   }
   return pool.sort(() => Math.random() - 0.5);
 };
@@ -147,8 +149,8 @@ export default function App() {
   const [state, setState] = useState<GameState>(() => ({
     playerHP: INITIAL_HP,
     aiHP: INITIAL_HP,
-    playerHand: deckOnMount.slice(0, 4),
-    aiHand: deckOnMount.slice(4, 8),
+    playerHand: deckOnMount.slice(0, PLAYER_BASE_HAND_LIMIT),
+    aiHand: deckOnMount.slice(PLAYER_BASE_HAND_LIMIT, PLAYER_BASE_HAND_LIMIT + AI_BASE_HAND_LIMIT),
     playerRole: 'HOME',
     aiRole: 'GUEST',
     phase: 'PLAYER_ATTACK',
@@ -156,7 +158,7 @@ export default function App() {
     guestPlayed: [],
     lastAction: zhCN.logs.battleInitialized,
     winner: null,
-    drawPile: deckOnMount.slice(8),
+    drawPile: deckOnMount.slice(PLAYER_BASE_HAND_LIMIT + AI_BASE_HAND_LIMIT),
     playerDiscardPile: [],
     aiDiscardPile: [],
     playerOfferingPile: [],
@@ -564,7 +566,7 @@ export default function App() {
 
     // Player draws up to Math.min(2, player hand limit - current hand size)
     const pDrawnCards: Card[] = [];
-    const currentPlayerHandLimit = gameMode === 'CHALLENGE' ? playerHandLimitRef.current : MAX_HAND;
+    const currentPlayerHandLimit = gameMode === 'CHALLENGE' ? playerHandLimitRef.current : PLAYER_BASE_HAND_LIMIT;
     const pDrawCount = Math.min(2, Math.max(0, currentPlayerHandLimit - newPHand.length));
 
     for (let i = 0; i < pDrawCount; i++) {
@@ -580,9 +582,9 @@ export default function App() {
       logEntries.push(zhCN.logs.sharedDeckChange(pDraw.length, tempDraw.length));
     }
 
-    // AI draws up to Math.min(2, MAX_HAND - current hand size)
+    // AI draws up to Math.min(2, AI_BASE_HAND_LIMIT - current hand size)
     const aDrawnCards: Card[] = [];
-    const aDrawCount = Math.min(2, Math.max(0, MAX_HAND - newAHand.length));
+    const aDrawCount = Math.min(2, Math.max(0, AI_BASE_HAND_LIMIT - newAHand.length));
 
     for (let i = 0; i < aDrawCount; i++) {
       if (tempDraw.length > 0) {
@@ -671,8 +673,8 @@ export default function App() {
     const nextState: GameState = {
       playerHP: INITIAL_HP,
       aiHP: initialAiHP,
-      playerHand: newDeck.slice(0, 4),
-      aiHand: newDeck.slice(4, 8),
+      playerHand: newDeck.slice(0, PLAYER_BASE_HAND_LIMIT),
+      aiHand: newDeck.slice(PLAYER_BASE_HAND_LIMIT, PLAYER_BASE_HAND_LIMIT + AI_BASE_HAND_LIMIT),
       playerRole: 'HOME',
       aiRole: 'GUEST',
       phase: 'PLAYER_ATTACK',
@@ -680,7 +682,7 @@ export default function App() {
       guestPlayed: [],
       lastAction: zhCN.logs.reset,
       winner: null,
-      drawPile: newDeck.slice(8),
+      drawPile: newDeck.slice(PLAYER_BASE_HAND_LIMIT + AI_BASE_HAND_LIMIT),
       playerDiscardPile: [],
       aiDiscardPile: [],
       playerOfferingPile: [],
@@ -973,7 +975,7 @@ export default function App() {
       };
     }
     const nextAiHand: Card[] = [];
-    for (let i = 0; i < MAX_HAND; i += 1) {
+    for (let i = 0; i < AI_BASE_HAND_LIMIT; i += 1) {
       if (deckSnapshot.drawPile.length <= 0) {
         const recycle = tryRecycleSharedDeckState(deckSnapshot);
         deckSnapshot = recycle.state;
@@ -1000,7 +1002,7 @@ export default function App() {
       guestPlayed: [],
       winner: null,
       phase: snapshot.playerRole === 'HOME' ? 'PLAYER_ATTACK' : 'AI_ATTACK',
-      lastAction: `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关\n[对手] 当前生命：${nextAiHP} / ${nextAiHP}\n[对手] 新的对手已进入战场\n[对手] 初始抽取 4 张卡牌`,
+      lastAction: `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关\n[对手] 当前生命：${nextAiHP} / ${nextAiHP}\n[对手] 新的对手已进入战场\n[对手] 初始抽取 ${AI_BASE_HAND_LIMIT} 张卡牌`,
     };
 
     stateRef.current = nextState;
@@ -1032,7 +1034,7 @@ export default function App() {
       `[对手] 当前生命：${nextAiHP} / ${nextAiHP}`,
       `[对手] 当前 AI 类型：${getChallengeAiStageConfig(nextStage).name}`,
       '[对手] 新的对手已进入战场',
-      '[对手] 初始抽取 4 张卡牌',
+      `[对手] 初始抽取 ${AI_BASE_HAND_LIMIT} 张卡牌`,
     ]);
     showMutationPhaseNotice(`第 ${nextStage} 关：新的对手已进入战场`, 850);
     scheduleSettlementTimer(() => {
@@ -2142,9 +2144,9 @@ export default function App() {
         }
       }
 
-      const currentPlayerHandLimit = gameMode === 'CHALLENGE' ? playerHandLimitRef.current : MAX_HAND;
+      const currentPlayerHandLimit = gameMode === 'CHALLENGE' ? playerHandLimitRef.current : PLAYER_BASE_HAND_LIMIT;
       const playerNeed = Math.min(2, Math.max(0, currentPlayerHandLimit - latest.playerHand.length));
-      const aiNeed = Math.min(2, Math.max(0, MAX_HAND - latest.aiHand.length));
+      const aiNeed = Math.min(2, Math.max(0, AI_BASE_HAND_LIMIT - latest.aiHand.length));
       const deckCount = latest.drawPile.length;
       const totalNeed = playerNeed + aiNeed;
 
@@ -5214,7 +5216,7 @@ export default function App() {
 
       {/* Rules Mini Info */}
       <div className="absolute top-[210px] right-10 text-[10px] text-text-dim/55 tracking-widest font-mono space-y-1.5 text-right pointer-events-none select-none max-w-[210px]">
-        <p className="font-extrabold text-text-dim/80">{zhCN.resources.initialSharedDeck}</p>
+        <p className="font-extrabold text-text-dim/80">公共牌库初始数量：{ACTIVE_BALANCE_CONFIG.sharedDeckTotalCards}</p>
         <p className="text-[9px] text-text-dim/45 leading-tight">{zhCN.resources.sharedDeckRule}</p>
         <p className="text-[9px] text-text-dim/45 leading-tight">弃牌区：双方独立记录</p>
         <p className="text-[9px] text-text-dim/45 leading-tight">{zhCN.resources.noReshuffle}</p>

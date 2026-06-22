@@ -37,7 +37,7 @@ export const zhCN = {
     depleted: '已耗尽',
     available: '可用',
     remainingCards: (count: number) => `剩余 ${count} 张`,
-    initialSharedDeck: '公共牌库初始数量：30',
+    initialSharedDeck: '公共牌库初始数量',
     sharedDeckRule: '双方共同抽取',
     discardSeparate: '弃牌区独立记录',
     noReshuffle: '牌库耗尽后不洗牌',

@@ -2,7 +2,7 @@ import { CardType } from '../types';
 
 export type BalanceProfile = 'DEV' | 'FORMAL';
 
-export const BALANCE_PROFILE: BalanceProfile = 'DEV';
+export const BALANCE_PROFILE: BalanceProfile = 'FORMAL';
 
 export const BALANCE_PROFILES = {
   DEV: {

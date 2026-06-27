@@ -77,12 +77,18 @@ export const CHALLENGE_STAGE_CONFIG = {
       note: '第 7 关：最终首领占位',
       aiHp: CHALLENGE_AI_HP_BY_STAGE[7],
       aiProfile: 'BOSS_PLACEHOLDER',
+      bossPressureEnabled: true,
+      bossPressureThreshold: 3,
+      bossPressureBonusDamage: 1,
     },
   } satisfies Record<number, {
     label: string;
     note: string;
     aiHp: number;
     aiProfile: ChallengeAiProfile;
+    bossPressureEnabled?: boolean;
+    bossPressureThreshold?: number;
+    bossPressureBonusDamage?: number;
   }>,
 } as const;
 

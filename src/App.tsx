@@ -432,6 +432,7 @@ export default function App() {
   const [hasTriggeredCoreCombustionThisEnemy, setHasTriggeredCoreCombustionThisEnemy] = useState(false);
   const [hasTriggeredVerdantSurgeThisEnemy, setHasTriggeredVerdantSurgeThisEnemy] = useState(false);
   const [hasTriggeredBlizzardThisEnemy, setHasTriggeredBlizzardThisEnemy] = useState(false);
+  const [bossPressure, setBossPressure] = useState(0);
   const [enemyScorchMarks, setEnemyScorchMarks] = useState(0);
   const [scorchFeedback, setScorchFeedback] = useState<{ type: 'mark' | 'fuel' | 'ember' | 'core' | 'combustion'; damage?: number; coreDamage?: number; token: number } | null>(null);
   const [selectedStageReward, setSelectedStageReward] = useState<StageRewardState>(null);
@@ -455,6 +456,7 @@ export default function App() {
   const playerMaxHpRef = useRef(CHALLENGE_REWARD_CONFIG.basePlayerMaxHp);
   const playerShieldRef = useRef(CHALLENGE_REWARD_CONFIG.basePlayerShield);
   const playerHandLimitRef = useRef(CHALLENGE_REWARD_CONFIG.basePlayerHandLimit);
+  const bossPressureRef = useRef(0);
 
   useEffect(() => {
     playerDewdropsRef.current = playerDewdrops;
@@ -475,6 +477,9 @@ export default function App() {
   useEffect(() => {
     playerHandLimitRef.current = playerHandLimit;
   }, [playerHandLimit]);
+  useEffect(() => {
+    bossPressureRef.current = bossPressure;
+  }, [bossPressure]);
 
   useEffect(() => {
     if (homeLogContainerRef.current) {
@@ -710,6 +715,8 @@ export default function App() {
     setHasTriggeredCoreCombustionThisEnemy(false);
     setHasTriggeredVerdantSurgeThisEnemy(false);
     setHasTriggeredBlizzardThisEnemy(false);
+    bossPressureRef.current = 0;
+    setBossPressure(0);
     enemyScorchMarksRef.current = 0;
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
@@ -819,6 +826,12 @@ export default function App() {
   const currentModeConfig = GAME_MODE_CONFIG[gameMode];
   const currentChallengeStageConfig = getChallengeStageConfig(currentChallengeStage);
   const currentAiMaxHP = gameMode === 'CHALLENGE' ? currentChallengeStageConfig.aiHp : INITIAL_HP;
+  const currentBossPressureConfig = 'bossPressureEnabled' in currentChallengeStageConfig
+    ? currentChallengeStageConfig
+    : null;
+  const isBossPressureActive = gameMode === 'CHALLENGE' && currentBossPressureConfig?.bossPressureEnabled === true;
+  const bossPressureThreshold = currentBossPressureConfig?.bossPressureThreshold ?? 0;
+  const bossPressureBonusDamage = currentBossPressureConfig?.bossPressureBonusDamage ?? 0;
   const currentEnvironmentRoute = currentModeConfig.environmentRoute;
   const mutationLimit = currentModeConfig.mutationLimit;
   const mutationIntervalRounds = currentModeConfig.mutationIntervalRounds;
@@ -902,6 +915,8 @@ export default function App() {
     setHasTriggeredCoreCombustionThisEnemy(false);
     setHasTriggeredVerdantSurgeThisEnemy(false);
     setHasTriggeredBlizzardThisEnemy(false);
+    bossPressureRef.current = 0;
+    setBossPressure(0);
     setState(frozenState);
     setHasUsedDeitySkillThisClash(false);
     setChallengeStageClear({
@@ -1015,6 +1030,8 @@ export default function App() {
     setHasTriggeredCoreCombustionThisEnemy(false);
     setHasTriggeredVerdantSurgeThisEnemy(false);
     setHasTriggeredBlizzardThisEnemy(false);
+    bossPressureRef.current = 0;
+    setBossPressure(0);
     enemyScorchMarksRef.current = 0;
     setEnemyScorchMarks(0);
     setScorchFeedback(null);
@@ -1145,6 +1162,8 @@ export default function App() {
     setHasTriggeredCoreCombustionThisEnemy(false);
     setHasTriggeredVerdantSurgeThisEnemy(false);
     setHasTriggeredBlizzardThisEnemy(false);
+    bossPressureRef.current = 0;
+    setBossPressure(0);
     const finalState: GameState = {
       ...snapshot,
       aiHP: 0,
@@ -1482,7 +1501,15 @@ export default function App() {
     const volcanoDamageToGuest = homeVolcanoBonus;
     const resonanceDamageToGuest = homeResonanceBonus;
     const playerIncomingDamage = playerRoleAtClash === 'HOME' ? hDamage : gDamage;
-    const playerShieldAbsorb = absorbPlayerDamageWithShield(playerIncomingDamage);
+    const bossPressureWillTrigger =
+      isBossPressureActive
+      && bossPressureThreshold > 0
+      && bossPressureBonusDamage > 0
+      && bossPressureRef.current >= bossPressureThreshold
+      && playerIncomingDamage > 0;
+    const bossPressureDamageBonus = bossPressureWillTrigger ? bossPressureBonusDamage : 0;
+    const playerIncomingDamageWithBossPressure = playerIncomingDamage + bossPressureDamageBonus;
+    const playerShieldAbsorb = absorbPlayerDamageWithShield(playerIncomingDamageWithBossPressure);
     const playerDamage = playerShieldAbsorb.hpDamage;
     const aiDamage = aiRoleAtClash === 'HOME' ? hDamage : gDamage;
     const playerBaseDamage = playerRoleAtClash === 'HOME' ? baseDamageToHome : baseDamageToGuest;
@@ -1577,14 +1604,24 @@ export default function App() {
       resonanceBonus: number,
       totalDamage: number,
       damagingCards: Card[],
+      bossBonus = 0,
     ) => {
       if (totalDamage <= 0) return;
       resultLogs.push(`[伤害] 基础伤害：${baseDamage}`);
       const volcanoLog = buildVolcanoDamageLog(damagingCards, volcanoBonus);
       if (volcanoLog) resultLogs.push(volcanoLog);
+      if (bossBonus > 0) resultLogs.push(`[Boss] 命运压迫额外伤害：+${bossBonus}`);
       if (resonanceBonus > 0) resultLogs.push(`[羁绊] 触发“灼烧共鸣”：+${VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage}`);
       resultLogs.push(`[结算] 最终伤害：${totalDamage}`);
-      if (resonanceBonus > 0) {
+      if (bossBonus > 0) {
+        const parts = [
+          `基础 ${baseDamage}`,
+          ...(volcanoBonus > 0 ? [`火山异变 ${volcanoBonus}`] : []),
+          ...(resonanceBonus > 0 ? [`灼烧共鸣 ${resonanceBonus}`] : []),
+          `命运压迫 ${bossBonus}`,
+        ];
+        resultLogs.push(`[伤害] ${parts.join(' + ')} = ${totalDamage}`);
+      } else if (resonanceBonus > 0) {
         resultLogs.push(`[伤害] 基础 ${baseDamage} + 火山异变 ${volcanoBonus} + 灼烧共鸣 ${resonanceBonus} = ${totalDamage}`);
       } else if (volcanoBonus > 0) {
         resultLogs.push(`[伤害] 基础 ${baseDamage} + 火山异变 ${volcanoBonus} = ${totalDamage}`);
@@ -1604,12 +1641,15 @@ export default function App() {
       resultLogs.push(`[羁绊] ${guestUser}触发“灼烧共鸣”`);
       resultLogs.push(`[灼烧] ${guestTarget}额外受到 ${VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage} 点伤害`);
     }
+    if (bossPressureWillTrigger) {
+      resultLogs.push(`[Boss] 命运压迫触发，额外造成 ${bossPressureBonusDamage} 点伤害`);
+    }
     if (aiDamage > 0) {
       appendDamageBreakdownLogs(aiBaseDamage, aiVolcanoDamage, aiResonanceDamage, aiDamage, aiRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
       resultLogs.push(zhCN.logs.aiDamage(aiDamage));
     }
-    if (playerIncomingDamage > 0) {
-      appendDamageBreakdownLogs(playerBaseDamage, playerVolcanoDamage, playerResonanceDamage, playerIncomingDamage, playerRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack);
+    if (playerIncomingDamageWithBossPressure > 0) {
+      appendDamageBreakdownLogs(playerBaseDamage, playerVolcanoDamage, playerResonanceDamage, playerIncomingDamageWithBossPressure, playerRoleAtClash === 'HOME' ? guestDamagingCards : finalHomeAttack, bossPressureDamageBonus);
       resultLogs.push(...playerShieldAbsorb.logs);
       if (playerDamage > 0) {
         resultLogs.push(zhCN.logs.playerDamage(playerDamage));
@@ -1723,6 +1763,10 @@ export default function App() {
       }, 780);
     }
     setLogs(prev => [...prev, ...resultLogs]);
+    if (bossPressureWillTrigger) {
+      bossPressureRef.current = 0;
+      setBossPressure(0);
+    }
     if (dewdropsAfterAutoHeal !== playerDewdropsRef.current) {
       playerDewdropsRef.current = dewdropsAfterAutoHeal;
       setPlayerDewdrops(dewdropsAfterAutoHeal);
@@ -1949,6 +1993,21 @@ export default function App() {
         const nextCompletedClashCount = completedClashCount + 1;
         setCompletedClashCount(nextCompletedClashCount);
         completedClashCountRef.current = nextCompletedClashCount;
+        if (isBossPressureActive && bossPressureThreshold > 0) {
+          const pressureBefore = bossPressureRef.current;
+          const pressureAfter = Math.min(bossPressureThreshold, pressureBefore + 1);
+          if (pressureAfter > pressureBefore) {
+            bossPressureRef.current = pressureAfter;
+            setBossPressure(pressureAfter);
+            setLogs(prev => [
+              ...prev,
+              `[Boss] 命运压迫 +1：${pressureBefore} → ${pressureAfter}`,
+              ...(pressureAfter >= bossPressureThreshold
+                ? ['[Boss] 命运压迫已满，下一次 Boss 有效伤害 +1']
+                : []),
+            ]);
+          }
+        }
         const growthSnapshot = stateRef.current;
         const playerGrowth = advanceForestGrowth({
           hand: growthSnapshot.playerHand,
@@ -2213,6 +2272,8 @@ export default function App() {
         setScorchFeedback(null);
         setHasTriggeredCoreCombustionThisEnemy(false);
         setHasTriggeredVerdantSurgeThisEnemy(false);
+        bossPressureRef.current = 0;
+        setBossPressure(0);
         setState(prev => ({
           ...prev,
           playerHP: settledPlayerHP,
@@ -2382,7 +2443,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [activeMutationLabel, activeMutationType, addAnimation, clearSettlementTimers, completedClashCount, currentAiMaxHP, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.DEER_SPIRIT.level, faithState.FROST_LORD.level, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
+  }, [activeMutationLabel, activeMutationType, addAnimation, bossPressureBonusDamage, bossPressureThreshold, clearSettlementTimers, completedClashCount, currentAiMaxHP, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.DEER_SPIRIT.level, faithState.FROST_LORD.level, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, isBossPressureActive, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -3735,6 +3796,11 @@ export default function App() {
           {screen === 'BATTLE' && gameMode === 'CHALLENGE' && (
             <div className="mt-1 text-[10px] font-mono font-black tracking-widest text-fuchsia-200/80">
               挑战模式 · 第 {currentChallengeStage} / {CHALLENGE_STAGE_CONFIG.totalStages} 关
+            </div>
+          )}
+          {isBossPressureActive && bossPressureThreshold > 0 && (
+            <div className="mt-0.5 text-[9px] font-mono font-black tracking-widest text-red-200/75">
+              命运压迫：{bossPressure} / {bossPressureThreshold}
             </div>
           )}
         </div>

@@ -59,6 +59,30 @@ const CARD_NAME_ZH: Record<CardType, string> = {
   SCISSORS: '剪刀',
 };
 
+const ART_ASSETS = {
+  battleBackground: '/assets/backgrounds/battle-main.webp',
+  cardBase: {
+    ROCK: '/assets/cards/base/rock.webp',
+    PAPER: '/assets/cards/base/paper.webp',
+    SCISSORS: '/assets/cards/base/scissors.webp',
+  },
+  cardBack: '/assets/cards/backs/card-back.webp',
+  mutationFrames: {
+    VOLCANO: '/assets/cards/frames/frame-volcano.png',
+    FOREST: '/assets/cards/frames/frame-forest.png',
+    GLACIER: '/assets/cards/frames/frame-glacier.png',
+  },
+  deities: {
+    KITCHEN_GOD: '/assets/deities/deity-kitchen-god.webp',
+    DEER_SPIRIT: '/assets/deities/deity-deer-spirit.webp',
+    FROST_LORD: '/assets/deities/deity-frost-lord.webp',
+  },
+  ui: {
+    sharedDeck: '/assets/ui/icons/icon-shared-deck.webp',
+    discardPile: '/assets/ui/icons/icon-discard-pile.webp',
+  },
+} as const;
+
 const createCard = (type?: CardType): Card => ({
   id: Math.random().toString(36).substring(2, 11),
   type: type || CARD_TYPES[Math.floor(Math.random() * CARD_TYPES.length)],
@@ -142,6 +166,58 @@ const CardIcon = ({ type, className }: { type: CardType; className?: string }) =
       return <div className={`flex items-center justify-center font-bold ${className}`}>✌️</div>;
   }
 };
+
+const AssetImage = ({ src, alt, className }: { src: string; alt: string; className: string }) => {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      draggable={false}
+      onError={() => setFailed(true)}
+    />
+  );
+};
+
+const CardArtLayer = ({ card }: { card: Card }) => (
+  <>
+    <AssetImage
+      src={ART_ASSETS.cardBase[card.type]}
+      alt={cardLabel(card.type)}
+      className="absolute inset-0 h-full w-full rounded-[inherit] object-cover"
+    />
+    {card.mutationType && (
+      <AssetImage
+        src={ART_ASSETS.mutationFrames[card.mutationType]}
+        alt={environmentLabel(card.mutationType)}
+        className="absolute inset-0 z-[3] h-full w-full rounded-[inherit] object-fill pointer-events-none"
+      />
+    )}
+    <div className="absolute inset-0 rounded-[inherit] bg-gradient-to-b from-black/0 via-black/5 to-black/58 pointer-events-none" />
+  </>
+);
+
+const CardBackArt = ({ className }: { className: string }) => (
+  <AssetImage
+    src={ART_ASSETS.cardBack}
+    alt="card back"
+    className={`${className} object-cover opacity-85 pointer-events-none`}
+  />
+);
+
+const DeityPortrait = ({ deityType, name, className }: { deityType: DeityType; name: string; className: string }) => (
+  <AssetImage
+    src={ART_ASSETS.deities[deityType]}
+    alt={name}
+    className={`${className} object-cover pointer-events-none`}
+  />
+);
+
+const UiAssetIcon = ({ src, alt, className }: { src: string; alt: string; className: string }) => (
+  <AssetImage src={src} alt={alt} className={`${className} object-contain pointer-events-none`} />
+);
 
 const getCardBorderClass = (type: CardType) => {
   switch (type) {
@@ -3920,7 +3996,14 @@ export default function App() {
   }
 
   return (
-    <div className="w-full max-w-[1600px] h-screen min-h-[720px] mx-auto bg-bg text-text-main flex flex-col font-sans border border-border overflow-hidden relative shadow-2xl">
+    <div
+      className="w-full max-w-[1600px] h-screen min-h-[720px] mx-auto bg-bg text-text-main flex flex-col font-sans border border-border overflow-hidden relative shadow-2xl"
+      style={{
+        backgroundImage: `linear-gradient(rgba(10,10,11,0.34), rgba(10,10,11,0.68)), url(${ART_ASSETS.battleBackground})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
       {/* Header */}
       <div className="h-20 px-10 flex items-center justify-between border-b border-border bg-surface/80 backdrop-blur-md z-20">
         <div className={`relative w-[300px] p-1 rounded-lg transition-all duration-350 border border-transparent ${playerHPShake ? 'animate-hp-shake' : ''} ${burnFeedback?.targets.includes('PLAYER') ? 'burn-hp-feedback animate-burn-hp-shake' : ''} ${forestRecoveryFeedback?.recoveryByTarget.PLAYER ? 'forest-recovery-hp-feedback' : ''} ${playerHPFlash ? 'bg-red-500/10 border-red-500/35 shadow-[0_0_15px_rgba(239,68,68,0.15)] bg-opacity-30' : ''}`}>
@@ -4190,9 +4273,13 @@ export default function App() {
             </div>
           ) : (
             Array.from({ length: state.aiHand.length }).map((_, i) => (
-              <div key={i} className="w-10 h-14 bg-[#1a1a20] border border-[#333] rounded-md opacity-40" 
-                style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.05) 4px, rgba(255,255,255,0.05) 8px)' }}
-              />
+              <div key={i} className="relative w-10 h-14 bg-[#1a1a20] border border-[#333] rounded-md opacity-60 overflow-hidden">
+                <CardBackArt className="absolute inset-0 h-full w-full" />
+                <div
+                  className="absolute inset-0"
+                  style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,0.05) 4px, rgba(255,255,255,0.05) 8px)' }}
+                />
+              </div>
             ))
           )}
         </div>
@@ -4230,15 +4317,20 @@ export default function App() {
             <div className="relative w-[42px] h-[56px] flex items-center justify-center">
               {/* Card 3 (Bottom) */}
               {state.aiDiscardPile.length > 2 && (
-                <div className="absolute w-[38px] h-[52px] bg-zinc-900 border border-zinc-800 rounded -translate-x-1 translate-y-1 -rotate-6 opacity-30 shadow-sm" />
+                <div className="absolute w-[38px] h-[52px] bg-zinc-900 border border-zinc-800 rounded -translate-x-1 translate-y-1 -rotate-6 opacity-30 shadow-sm overflow-hidden">
+                  <UiAssetIcon src={ART_ASSETS.ui.discardPile} alt={zhCN.resources.aiDiscard} className="absolute inset-1 h-[calc(100%-0.5rem)] w-[calc(100%-0.5rem)]" />
+                </div>
               )}
               {/* Card 2 (Middle) */}
               {state.aiDiscardPile.length > 1 && (
-                <div className="absolute w-[40px] h-[54px] bg-zinc-800 border border-zinc-750 rounded -translate-x-0.5 translate-y-0.5 -rotate-3 opacity-60 shadow flex items-center justify-center" />
+                <div className="absolute w-[40px] h-[54px] bg-zinc-800 border border-zinc-750 rounded -translate-x-0.5 translate-y-0.5 -rotate-3 opacity-60 shadow flex items-center justify-center overflow-hidden">
+                  <UiAssetIcon src={ART_ASSETS.ui.discardPile} alt={zhCN.resources.aiDiscard} className="absolute inset-1 h-[calc(100%-0.5rem)] w-[calc(100%-0.5rem)]" />
+                </div>
               )}
               {/* Card 1 (Top) */}
-              <div className="absolute w-[42px] h-[56px] bg-[#1a1a22] border border-[#ef4444]/25 rounded flex items-center justify-center shadow-md">
-                <div className="flex flex-col items-center justify-center font-mono text-[9px] text-[#ef4444]/80">
+              <div className="absolute w-[42px] h-[56px] bg-[#1a1a22] border border-[#ef4444]/25 rounded flex items-center justify-center shadow-md overflow-hidden">
+                <UiAssetIcon src={ART_ASSETS.ui.discardPile} alt={zhCN.resources.aiDiscard} className="absolute inset-1 h-[calc(100%-0.5rem)] w-[calc(100%-0.5rem)] opacity-90" />
+                <div className="relative z-10 flex flex-col items-center justify-center font-mono text-[9px] text-[#ef4444]/80">
                   <span className="text-sm leading-none">▼</span>
                 </div>
               </div>
@@ -4304,7 +4396,9 @@ export default function App() {
                               ${isClaimed && !isSelected ? 'opacity-35 cursor-not-allowed' : ''}
                             `}
                           >
-                            <div className="text-xl leading-none">{deity.icon}</div>
+                            <div className="relative mx-auto mb-1 flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-white/12 bg-black/30 text-xl leading-none">
+                              <DeityPortrait deityType={deity.id} name={deity.name} className="h-full w-full" />
+                            </div>
                             <div className="mt-1 text-[11px] font-black tracking-wider">{deity.name}</div>
                             <div className="mt-1 text-[9px] font-bold text-fuchsia-100/70">信仰 +1</div>
                           </button>
@@ -5075,19 +5169,25 @@ export default function App() {
             }`}>
               {/* Card 3 (Bottom) */}
               {state.drawPile.length > 2 && (
-                <div className="absolute w-[36px] h-[52px] bg-zinc-850 border border-zinc-750/30 rounded-md translate-x-1 translate-y-1 rotate-6 opacity-30 shadow-sm" />
+                <div className="absolute w-[36px] h-[52px] bg-zinc-850 border border-zinc-750/30 rounded-md translate-x-1 translate-y-1 rotate-6 opacity-30 shadow-sm overflow-hidden">
+                  <CardBackArt className="absolute inset-0 h-full w-full" />
+                </div>
               )}
               {/* Card 2 (Middle) */}
               {state.drawPile.length > 1 && (
-                <div className="absolute w-[38px] h-[54px] bg-zinc-800 border border-zinc-700 rounded-md translate-x-0.5 translate-y-0.5 rotate-3 opacity-60 shadow flex items-center justify-center" />
+                <div className="absolute w-[38px] h-[54px] bg-zinc-800 border border-zinc-700 rounded-md translate-x-0.5 translate-y-0.5 rotate-3 opacity-60 shadow flex items-center justify-center overflow-hidden">
+                  <CardBackArt className="absolute inset-0 h-full w-full" />
+                </div>
               )}
               {/* Card 1 (Top) */}
-              <div className={`absolute w-[40px] h-[56px] bg-[#1a1c23] border rounded-md flex items-center justify-center shadow-md transition-all ${
+              <div className={`absolute w-[40px] h-[56px] bg-[#1a1c23] border rounded-md flex items-center justify-center shadow-md transition-all overflow-hidden ${
                 state.drawPile.length === 0
                   ? 'border-red-500/75 bg-red-950/25 animate-[pulse_1.4s_infinite]'
                   : 'border-slate-500/35'
               }`}>
+                {state.drawPile.length > 0 && <CardBackArt className="absolute inset-0 h-full w-full" />}
                 <div className="relative w-full h-full flex items-center justify-center">
+                  <UiAssetIcon src={ART_ASSETS.ui.sharedDeck} alt={zhCN.resources.sharedDeck} className="absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)] opacity-85" />
                   <ArrowUpDown className={`w-4 h-4 ${state.drawPile.length === 0 ? 'text-red-400' : 'text-slate-300/70'}`} />
                 </div>
               </div>
@@ -5154,7 +5254,12 @@ export default function App() {
                   const showFrostSigils = deityType === 'FROST_LORD';
                   return (
                     <div key={deity.id} className="rounded-md border border-white/8 bg-black/20 px-1.5 py-1 text-center">
-                      <div className="text-[10px] font-black tracking-wider text-white/85">{deity.icon} {deity.name}</div>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <div className="relative h-8 w-8 overflow-hidden rounded-full border border-white/10 bg-black/28">
+                          <DeityPortrait deityType={deity.id} name={deity.name} className="h-full w-full" />
+                        </div>
+                        <div className="text-[10px] font-black tracking-wider text-white/85">{deity.icon} {deity.name}</div>
+                      </div>
                       <div className="mt-0.5 text-[9px] font-extrabold text-fuchsia-100/75">Lv.{faith.level}</div>
                       <div className="mt-0.5 text-[8px] font-semibold text-white/45">
                         信仰：{nextThreshold === null ? 'MAX' : `${faith.faith} / ${nextThreshold}`}
@@ -5239,7 +5344,7 @@ export default function App() {
                       }
                     }}
                     className={`
-                      card w-[90px] h-[120px] rounded-xl bg-surface border transition-all flex flex-col items-center justify-center relative card-shadow
+                      card w-[90px] h-[120px] rounded-xl bg-surface border transition-all flex flex-col items-center justify-center relative card-shadow overflow-hidden
                       ${isShaking ? 'animate-shake-card' : ''}
                       ${card.mutationType === 'VOLCANO' ? `lava-card ${mutatedCardGlowIds[card.id] ? 'lava-card--fresh' : ''}` : ''}
                       ${card.mutationType === 'FOREST' ? `forest-card forest-card--${card.forestGrowthStage === 'MATURE' ? 'mature' : 'seedling'} ${mutatedCardGlowIds[card.id] ? 'forest-card--fresh' : ''} ${maturedCardGlowIds[card.id] ? 'forest-card--growing' : ''}` : ''}
@@ -5249,13 +5354,14 @@ export default function App() {
                       ${isSelected ? 'border-accent -translate-y-4 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'border-border'}
                     `}
                   >
+                    <CardArtLayer card={card} />
                     {maturedCardGlowIds[card.id] && (
                       <div className="absolute -top-7 left-1/2 -translate-x-1/2 rounded-md border border-emerald-400/35 bg-black/75 px-2 py-1 text-[10px] font-black tracking-widest text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.22)] pointer-events-none">
                         🌿 已成熟
                       </div>
                     )}
                     <CardIcon type={card.type} className="relative z-10 text-4xl mb-2" />
-                    <div className="text-[10px] font-bold tracking-wider text-text-dim">
+                    <div className="relative z-10 text-[10px] font-bold tracking-wider text-text-dim">
                       {card.mutationType === 'VOLCANO'
                         ? volcanoCardLabel(card.type)
                         : card.mutationType === 'FOREST'
@@ -5265,27 +5371,27 @@ export default function App() {
                           : cardLabel(card.type)}
                     </div>
                     {card.mutationType === 'FOREST' && (
-                      <div className="mt-0.5 text-[9px] font-black tracking-widest text-emerald-200/85">
+                      <div className="relative z-10 mt-0.5 text-[9px] font-black tracking-widest text-emerald-200/85">
                         {forestStageLabel(card)}
                       </div>
                     )}
                     {card.mutationType === 'VOLCANO' && (
-                      <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(251,146,60,0.55)]" aria-hidden="true">
+                      <div className="absolute top-1.5 right-1.5 z-10 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(251,146,60,0.55)]" aria-hidden="true">
                         🔥
                       </div>
                     )}
                     {card.mutationType === 'FOREST' && (
-                      <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(52,211,153,0.55)]" aria-hidden="true">
+                      <div className="absolute top-1.5 right-1.5 z-10 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(52,211,153,0.55)]" aria-hidden="true">
                         {forestIcon(card)}
                       </div>
                     )}
                     {card.mutationType === 'GLACIER' && (
-                      <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(125,211,252,0.55)]" aria-hidden="true">
+                      <div className="absolute top-1.5 right-1.5 z-10 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(125,211,252,0.55)]" aria-hidden="true">
                         ❄️
                       </div>
                     )}
                     {card.mutationType === 'GLACIER' && card.glacierEchoUsed && (
-                      <div className="absolute bottom-1.5 right-1.5 rounded border border-cyan-200/30 bg-[#06121a]/85 px-1.5 py-0.5 text-[7px] font-black tracking-wider text-cyan-50/80 shadow-[0_0_8px_rgba(125,211,252,0.15)] pointer-events-none">
+                      <div className="absolute bottom-1.5 right-1.5 z-10 rounded border border-cyan-200/30 bg-[#06121a]/85 px-1.5 py-0.5 text-[7px] font-black tracking-wider text-cyan-50/80 shadow-[0_0_8px_rgba(125,211,252,0.15)] pointer-events-none">
                         ❄️ 1 / 1
                       </div>
                     )}
@@ -5597,15 +5703,20 @@ export default function App() {
             <div className="relative w-[42px] h-[56px] flex items-center justify-center">
               {/* Card 3 (Bottom) */}
               {state.playerDiscardPile.length > 2 && (
-                <div className="absolute w-[38px] h-[52px] bg-zinc-900 border border-zinc-800 rounded -translate-x-1 translate-y-1 -rotate-6 opacity-30 shadow-sm" />
+                <div className="absolute w-[38px] h-[52px] bg-zinc-900 border border-zinc-800 rounded -translate-x-1 translate-y-1 -rotate-6 opacity-30 shadow-sm overflow-hidden">
+                  <UiAssetIcon src={ART_ASSETS.ui.discardPile} alt={zhCN.resources.playerDiscard} className="absolute inset-1 h-[calc(100%-0.5rem)] w-[calc(100%-0.5rem)]" />
+                </div>
               )}
               {/* Card 2 (Middle) */}
               {state.playerDiscardPile.length > 1 && (
-                <div className="absolute w-[40px] h-[54px] bg-zinc-800 border border-zinc-750 rounded -translate-x-0.5 translate-y-0.5 -rotate-3 opacity-60 shadow" />
+                <div className="absolute w-[40px] h-[54px] bg-zinc-800 border border-zinc-750 rounded -translate-x-0.5 translate-y-0.5 -rotate-3 opacity-60 shadow overflow-hidden">
+                  <UiAssetIcon src={ART_ASSETS.ui.discardPile} alt={zhCN.resources.playerDiscard} className="absolute inset-1 h-[calc(100%-0.5rem)] w-[calc(100%-0.5rem)]" />
+                </div>
               )}
               {/* Card 1 (Top) */}
-              <div className="absolute w-[42px] h-[56px] bg-[#1a1a22] border border-emerald-500/25 rounded flex items-center justify-center shadow-md">
-                <div className="flex flex-col items-center justify-center font-mono text-[9px] text-emerald-400/80">
+              <div className="absolute w-[42px] h-[56px] bg-[#1a1a22] border border-emerald-500/25 rounded flex items-center justify-center shadow-md overflow-hidden">
+                <UiAssetIcon src={ART_ASSETS.ui.discardPile} alt={zhCN.resources.playerDiscard} className="absolute inset-1 h-[calc(100%-0.5rem)] w-[calc(100%-0.5rem)] opacity-90" />
+                <div className="relative z-10 flex flex-col items-center justify-center font-mono text-[9px] text-emerald-400/80">
                   <span className="text-sm leading-none">▼</span>
                 </div>
               </div>
@@ -5788,7 +5899,9 @@ export default function App() {
                         onClick={() => confirmOffering(deity.id)}
                         className="rounded-lg border border-white/10 bg-black/24 px-2 py-3 text-center transition-all hover:-translate-y-0.5 hover:border-fuchsia-200/35 hover:bg-fuchsia-950/25"
                       >
-                        <div className="text-xl">{deity.icon}</div>
+                        <div className="relative mx-auto h-10 w-10 overflow-hidden rounded-full border border-white/10 bg-black/28 text-xl">
+                          <DeityPortrait deityType={deity.id} name={deity.name} className="h-full w-full" />
+                        </div>
                         <div className="mt-1 text-[11px] font-black tracking-wider text-white/85">{deity.name}</div>
                         <div className={`mt-1 text-[9px] font-bold ${sameEnvironment ? 'text-fuchsia-100/85' : 'text-white/45'}`}>
                           {sameEnvironment ? '同环境' : '异环境'}：+{gain} 信仰
@@ -5828,11 +5941,12 @@ export default function App() {
                     key={card.id}
                     onClick={() => handleGlacierEchoPick(card.id)}
                     title={`返回手牌后仍保留冰川属性\n每张冰川牌最多保留 1 次`}
-                    className={`glacier-echo-candidate group w-[126px] h-[154px] rounded-xl bg-surface border border-cyan-300/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-cyan-200 hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
+                    className={`glacier-echo-candidate group w-[126px] h-[154px] rounded-xl bg-surface border border-cyan-300/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-cyan-200 hover:-translate-y-1 transition-all overflow-hidden ${getCardBorderClass(card.type)}`}
                   >
+                    <CardArtLayer card={card} />
                     <div className="absolute top-2 right-2 text-[14px] drop-shadow-[0_0_6px_rgba(125,211,252,0.45)]" aria-hidden="true">❄️</div>
                     <CardIcon type={card.type} className="text-4xl mb-2" />
-                    <div className="text-[10px] font-bold tracking-wider text-text-dim leading-relaxed">
+                    <div className="relative z-10 text-[10px] font-bold tracking-wider text-text-dim leading-relaxed">
                       <div>{glacierCardLabel(card.type)}</div>
                       <div className="text-cyan-100/90">保留冰川属性</div>
                     </div>
@@ -5876,13 +5990,14 @@ export default function App() {
                         ? `感染后：\n❄️ ${glacierCardLabel(card.type)}\n\n与敌方卡牌平局时：\n返回手牌并恢复为普通牌`
                         : `感染后：\n🌱 ${forestCardLabel(card.type)}·幼苗\n\n完整保留 1 次交锋后成熟\n成熟后命中可恢复 HP`
                     }
-                    className={`group w-[126px] h-[154px] rounded-xl bg-surface border ${isVolcanoEnvironment ? 'border-orange-500/30 hover:border-orange-300' : isGlacierEnvironment ? 'border-cyan-300/30 hover:border-cyan-200' : 'border-emerald-500/30 hover:border-emerald-300'} flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:-translate-y-1 transition-all ${getCardBorderClass(card.type)}`}
+                    className={`group w-[126px] h-[154px] rounded-xl bg-surface border ${isVolcanoEnvironment ? 'border-orange-500/30 hover:border-orange-300' : isGlacierEnvironment ? 'border-cyan-300/30 hover:border-cyan-200' : 'border-emerald-500/30 hover:border-emerald-300'} flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:-translate-y-1 transition-all overflow-hidden ${getCardBorderClass(card.type)}`}
                   >
+                    <CardArtLayer card={card} />
                     <div className={`absolute top-2 right-2 text-[14px] ${isVolcanoEnvironment ? 'drop-shadow-[0_0_6px_rgba(251,146,60,0.45)]' : isGlacierEnvironment ? 'drop-shadow-[0_0_6px_rgba(125,211,252,0.45)]' : 'drop-shadow-[0_0_6px_rgba(52,211,153,0.45)]'}`} aria-hidden="true">
                       {isVolcanoEnvironment ? '🔥' : isGlacierEnvironment ? '❄️' : '🌱'}
                     </div>
                     <CardIcon type={card.type} className="text-4xl mb-2" />
-                    <div className="text-[10px] font-bold tracking-wider text-text-dim leading-relaxed">
+                    <div className="relative z-10 text-[10px] font-bold tracking-wider text-text-dim leading-relaxed">
                       <div>普通{plainCardLabel(card.type)}</div>
                       <div className={isVolcanoEnvironment ? 'text-orange-200/90' : isGlacierEnvironment ? 'text-cyan-100/90' : 'text-emerald-200/90'}>
                         → {isForestEnvironment ? `${forestCardLabel(card.type)}·幼苗` : activeMutationCardLabel(card.type)}
@@ -6103,6 +6218,7 @@ export default function App() {
         <AnimatePresence>
           {activeAnims.map(anim => {
             const isShuffle = anim.type === 'SHUFFLE';
+            const useCardBack = anim.type === 'DRAW' || anim.type === 'DRAW_PLAYER' || anim.type === 'DRAW_AI' || isShuffle;
 
             return (
               <motion.div
@@ -6112,11 +6228,16 @@ export default function App() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: isShuffle ? 0.7 : 0.55, ease: "easeInOut" }}
                 onAnimationComplete={() => removeAnimation(anim.id)}
-                className="absolute w-[65px] h-[90px] rounded-lg bg-[#141417] border border-border flex flex-col items-center justify-center shadow-2xl z-50 select-none pointer-events-none"
+                className="absolute w-[65px] h-[90px] rounded-lg bg-[#141417] border border-border flex flex-col items-center justify-center shadow-2xl z-50 select-none pointer-events-none overflow-hidden"
                 style={{ left: 0, top: 0 }}
               >
-                {anim.cardType ? (
-                  <div className="flex flex-col items-center justify-center">
+                {useCardBack ? (
+                  <>
+                    <CardBackArt className="absolute inset-0 h-full w-full" />
+                    <div className="relative z-10 text-xl text-text-dim/45">馃幋</div>
+                  </>
+                ) : anim.cardType ? (
+                  <div className="relative z-10 flex flex-col items-center justify-center">
                     <CardIcon type={anim.cardType} className="text-2xl" />
                     <span className="text-[7.5px] font-black tracking-wider opacity-40 mt-1">{cardLabel(anim.cardType)}</span>
                   </div>
@@ -6650,6 +6771,7 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
         className="w-[90px] h-[120px] rounded-xl bg-gradient-to-br from-[#181920] to-[#111116] border border-[#3b82f6]/40 flex flex-col items-center justify-center relative shadow-2xl overflow-hidden select-none"
         style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(59,130,246,0.05) 5px, rgba(59,130,246,0.05) 10px)' }}
       >
+        <CardBackArt className="absolute inset-0 h-full w-full" />
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-500 opacity-60" />
         <div className="text-3xl mb-1 text-blue-400 select-none animate-pulse">🎴</div>
         <span className="text-[8px] font-mono font-black tracking-widest text-[#3b82f6]/95">敌方卡牌</span>
@@ -6662,10 +6784,11 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
     <motion.div 
       initial={{ scale: 0.8, opacity: 0, y: 10 }}
       animate={{ scale: 1, opacity: 1, y: 0 }}
-      className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl ${getCardBorderClass(card.type)} ${card.mutationType === 'VOLCANO' ? 'lava-card' : ''} ${card.mutationType === 'FOREST' ? `forest-card forest-card--${card.forestGrowthStage === 'MATURE' ? 'mature' : 'seedling'}` : ''} ${card.mutationType === 'GLACIER' ? `glacier-card ${card.glacierEchoUsed ? 'glacier-card--echo-used' : ''}` : ''}`}
+      className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl overflow-hidden ${getCardBorderClass(card.type)} ${card.mutationType === 'VOLCANO' ? 'lava-card' : ''} ${card.mutationType === 'FOREST' ? `forest-card forest-card--${card.forestGrowthStage === 'MATURE' ? 'mature' : 'seedling'}` : ''} ${card.mutationType === 'GLACIER' ? `glacier-card ${card.glacierEchoUsed ? 'glacier-card--echo-used' : ''}` : ''}`}
     >
+      <CardArtLayer card={card} />
       <CardIcon type={card.type} className="relative z-10 text-3xl mb-1" />
-      <span className="text-[9px] font-black tracking-widest opacity-40">
+      <span className="relative z-10 text-[9px] font-black tracking-widest opacity-70">
         {card.mutationType === 'VOLCANO'
           ? volcanoCardLabel(card.type)
           : card.mutationType === 'FOREST'
@@ -6675,27 +6798,27 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
             : cardLabel(card.type)}
       </span>
       {card.mutationType === 'FOREST' && (
-        <span className="mt-0.5 text-[8px] font-black tracking-widest text-emerald-200/80">
+        <span className="relative z-10 mt-0.5 text-[8px] font-black tracking-widest text-emerald-200/80">
           {forestStageLabel(card)}
         </span>
       )}
       {card.mutationType === 'VOLCANO' && (
-        <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(251,146,60,0.55)]" aria-hidden="true">
+        <div className="absolute top-1.5 right-1.5 z-10 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(251,146,60,0.55)]" aria-hidden="true">
           🔥
         </div>
       )}
       {card.mutationType === 'FOREST' && (
-        <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(52,211,153,0.55)]" aria-hidden="true">
+        <div className="absolute top-1.5 right-1.5 z-10 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(52,211,153,0.55)]" aria-hidden="true">
           {forestIcon(card)}
         </div>
       )}
       {card.mutationType === 'GLACIER' && (
-        <div className="absolute top-1.5 right-1.5 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(125,211,252,0.55)]" aria-hidden="true">
+        <div className="absolute top-1.5 right-1.5 z-10 text-[13px] leading-none drop-shadow-[0_0_6px_rgba(125,211,252,0.55)]" aria-hidden="true">
           ❄️
         </div>
       )}
       {card.mutationType === 'GLACIER' && card.glacierEchoUsed && (
-        <div className="absolute bottom-1.5 right-1.5 rounded border border-cyan-200/30 bg-[#06121a]/85 px-1.5 py-0.5 text-[7px] font-black tracking-wider text-cyan-50/80 shadow-[0_0_8px_rgba(125,211,252,0.15)] pointer-events-none">
+        <div className="absolute bottom-1.5 right-1.5 z-10 rounded border border-cyan-200/30 bg-[#06121a]/85 px-1.5 py-0.5 text-[7px] font-black tracking-wider text-cyan-50/80 shadow-[0_0_8px_rgba(125,211,252,0.15)] pointer-events-none">
           ❄️ 1 / 1
         </div>
       )}

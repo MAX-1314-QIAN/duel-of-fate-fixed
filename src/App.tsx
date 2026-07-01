@@ -213,6 +213,7 @@ export default function App() {
   const [settlementSubPhase, setSettlementSubPhase] = useState<'resolving' | 'move-to-discard' | 'replenishing' | 'replenish-complete' | 'round-end' | null>(null);
   const [isBattleLogOpen, setIsBattleLogOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
+  const [isDevDeityPickerOpen, setIsDevDeityPickerOpen] = useState(false);
   const [isExitLobbyDialogOpen, setIsExitLobbyDialogOpen] = useState(false);
   const [logs, setLogs] = useState<string[]>([
     zhCN.logs.battleInitialized,
@@ -580,6 +581,19 @@ export default function App() {
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [isExitLobbyDialogOpen]);
+
+  useEffect(() => {
+    if (!isDevDeityPickerOpen) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsDevDeityPickerOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isDevDeityPickerOpen]);
 
   // Player tactical card drawer and AI deck generator from shared deck
   const replenishHandsWithState = useCallback((
@@ -1383,6 +1397,17 @@ export default function App() {
     setLogs(prev => [...prev, '[开发者] 玩家护盾已充满']);
   };
 
+  const devMaxSingleDeity = (deity: keyof FaithState, label: string) => {
+    if (gameMode !== 'CHALLENGE') return;
+    const faithForLv4 = FAITH_LEVEL_THRESHOLDS[4];
+    setFaithState(prev => ({
+      ...prev,
+      [deity]: { faith: faithForLv4, level: getFaithLevel(faithForLv4) },
+    }));
+    setIsDevDeityPickerOpen(false);
+    setLogs(prev => [...prev, `[开发者] ${label}已提升至 Lv.4`]);
+  };
+
   const devMaxAllDeities = () => {
     if (gameMode !== 'CHALLENGE') return;
     const faithForLv4 = FAITH_LEVEL_THRESHOLDS[4];
@@ -1391,6 +1416,7 @@ export default function App() {
       DEER_SPIRIT: { faith: faithForLv4, level: getFaithLevel(faithForLv4) },
       FROST_LORD: { faith: faithForLv4, level: getFaithLevel(faithForLv4) },
     });
+    setIsDevDeityPickerOpen(false);
     setLogs(prev => [...prev, '[开发者] 三位神明已提升至 Lv.4']);
   };
 
@@ -4126,7 +4152,7 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={devMaxAllDeities}
+                    onClick={() => setIsDevDeityPickerOpen(true)}
                     className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
                   >
                     三神满级
@@ -4866,6 +4892,75 @@ export default function App() {
             })}
                 </div>
               </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isDevDeityPickerOpen && DEV_TOOLS_ENABLED && DEV_TOOLS_CONFIG.showPanel && gameMode === 'CHALLENGE' && (
+            <>
+              <motion.button
+                type="button"
+                aria-label="关闭神明满级选择"
+                className="fixed inset-0 z-[116] cursor-default bg-black/45 backdrop-blur-[2px]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16 }}
+                onClick={() => setIsDevDeityPickerOpen(false)}
+              />
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="dev-deity-picker-title"
+                className="fixed left-1/2 top-1/2 z-[117] w-[330px] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-cyan-300/20 bg-[#061521]/96 p-4 font-mono text-text-main shadow-[0_0_34px_rgba(34,211,238,0.18)]"
+                initial={{ opacity: 0, scale: 0.94, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                onClick={event => event.stopPropagation()}
+              >
+                <div id="dev-deity-picker-title" className="text-center text-[14px] font-black tracking-widest text-cyan-100">
+                  选择神明满级
+                </div>
+                <div className="mt-4 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => devMaxSingleDeity('KITCHEN_GOD', '灶神')}
+                    className="h-9 rounded-lg border border-white/10 bg-black/30 text-[10px] font-black tracking-widest text-white/85 transition-all hover:border-cyan-200/40 hover:bg-cyan-950/35 active:scale-[0.98]"
+                  >
+                    灶神满级
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => devMaxSingleDeity('DEER_SPIRIT', '鹿灵')}
+                    className="h-9 rounded-lg border border-white/10 bg-black/30 text-[10px] font-black tracking-widest text-white/85 transition-all hover:border-cyan-200/40 hover:bg-cyan-950/35 active:scale-[0.98]"
+                  >
+                    鹿灵满级
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => devMaxSingleDeity('FROST_LORD', '霜君')}
+                    className="h-9 rounded-lg border border-white/10 bg-black/30 text-[10px] font-black tracking-widest text-white/85 transition-all hover:border-cyan-200/40 hover:bg-cyan-950/35 active:scale-[0.98]"
+                  >
+                    霜君满级
+                  </button>
+                  <button
+                    type="button"
+                    onClick={devMaxAllDeities}
+                    className="h-9 rounded-lg border border-cyan-300/26 bg-cyan-950/28 text-[10px] font-black tracking-widest text-cyan-100 transition-all hover:border-cyan-200/55 hover:bg-cyan-900/35 active:scale-[0.98]"
+                  >
+                    三神全部满级
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsDevDeityPickerOpen(false)}
+                    className="h-8 rounded-lg border border-white/10 bg-white/[0.04] text-[10px] font-black tracking-widest text-text-dim transition-all hover:border-white/24 hover:text-white active:scale-[0.98]"
+                  >
+                    取消
+                  </button>
+                </div>
+              </motion.div>
             </>
           )}
         </AnimatePresence>

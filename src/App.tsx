@@ -3816,32 +3816,38 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              {hasValidChallengeSave ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startNewChallengeRun();
+                    }}
+                    className="py-2.5 rounded-lg text-[11px] font-black tracking-widest uppercase transition-all duration-300 cursor-pointer bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-fuchsia-500/15"
+                  >
+                    重新开始
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      continueSavedChallengeRun();
+                    }}
+                    className="py-2.5 rounded-lg text-[11px] font-black tracking-widest uppercase transition-all duration-300 cursor-pointer bg-cyan-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-cyan-500/15"
+                  >
+                    继续作战
+                  </button>
+                </div>
+              ) : (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     startNewChallengeRun();
                   }}
-                  className="py-2.5 rounded-lg text-[11px] font-black tracking-widest uppercase transition-all duration-300 cursor-pointer bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-fuchsia-500/15"
+                  className="w-full py-2.5 rounded-lg text-xs font-black tracking-widest uppercase transition-all duration-300 cursor-pointer bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-fuchsia-500/15"
                 >
-                  重新开始
+                  开始作战
                 </button>
-                <button
-                  disabled={!hasValidChallengeSave}
-                  title={hasValidChallengeSave ? undefined : '暂无存档'}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    continueSavedChallengeRun();
-                  }}
-                  className={`py-2.5 rounded-lg text-[11px] font-black tracking-widest uppercase transition-all duration-300 ${
-                    hasValidChallengeSave
-                      ? 'cursor-pointer bg-cyan-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-cyan-500/15'
-                      : 'cursor-not-allowed bg-fuchsia-950/20 text-fuchsia-400/35 border border-fuchsia-900/30'
-                  }`}
-                >
-                  {hasValidChallengeSave ? '继续作战' : '暂无存档'}
-                </button>
-              </div>
+              )}
             </div>
           </div>
 
@@ -4080,71 +4086,72 @@ export default function App() {
         </div>
       </div>
 
-      {DEV_TOOLS_ENABLED && DEV_TOOLS_CONFIG.showPanel && gameMode === 'CHALLENGE' && (
-        <div className="absolute left-4 top-24 z-[75] font-mono">
-          <button
-            type="button"
-            onClick={() => setIsDevPanelOpen(prev => !prev)}
-            className="rounded-md border border-cyan-300/30 bg-black/70 px-3 py-1.5 text-[10px] font-black tracking-widest text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.12)] hover:border-cyan-200/55 hover:bg-cyan-950/55 active:scale-95"
-          >
-            🧪 Dev
-          </button>
-          {isDevPanelOpen && (
-            <div className="mt-2 w-[168px] rounded-lg border border-cyan-300/20 bg-[#061521]/94 p-2 shadow-[0_0_22px_rgba(34,211,238,0.14)]">
-              <div className="mb-2 text-center text-[9px] font-black tracking-widest text-cyan-100/65">
-                CHALLENGE DEV
+      <div className="absolute left-4 top-24 z-[75] flex flex-col items-start gap-2 font-mono">
+        {DEV_TOOLS_ENABLED && DEV_TOOLS_CONFIG.showPanel && gameMode === 'CHALLENGE' && (
+          <>
+            <button
+              type="button"
+              onClick={() => setIsDevPanelOpen(prev => !prev)}
+              className="rounded-md border border-cyan-300/30 bg-black/70 px-3 py-1.5 text-[10px] font-black tracking-widest text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.12)] hover:border-cyan-200/55 hover:bg-cyan-950/55 active:scale-95"
+            >
+              🧪 Dev
+            </button>
+            {isDevPanelOpen && (
+              <div className="w-[168px] rounded-lg border border-cyan-300/20 bg-[#061521]/94 p-2 shadow-[0_0_22px_rgba(34,211,238,0.14)]">
+                <div className="mb-2 text-center text-[9px] font-black tracking-widest text-cyan-100/65">
+                  CHALLENGE DEV
+                </div>
+                <div className="grid gap-1.5">
+                  <button
+                    type="button"
+                    onClick={devDefeatCurrentAi}
+                    disabled={Boolean(challengeStageClear) || state.winner !== null}
+                    className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30 disabled:opacity-35 disabled:cursor-not-allowed"
+                  >
+                    击败当前 AI
+                  </button>
+                  <button
+                    type="button"
+                    onClick={devFillPlayerHealth}
+                    className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
+                  >
+                    补满生命
+                  </button>
+                  <button
+                    type="button"
+                    onClick={devFillPlayerShield}
+                    className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
+                  >
+                    护盾充满
+                  </button>
+                  <button
+                    type="button"
+                    onClick={devMaxAllDeities}
+                    className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
+                  >
+                    三神满级
+                  </button>
+                  <button
+                    type="button"
+                    onClick={devClaimCurrentReward}
+                    disabled={!challengeStageClear}
+                    className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30 disabled:opacity-35 disabled:cursor-not-allowed"
+                  >
+                    奖励测试
+                  </button>
+                </div>
               </div>
-              <div className="grid gap-1.5">
-                <button
-                  type="button"
-                  onClick={devDefeatCurrentAi}
-                  disabled={Boolean(challengeStageClear) || state.winner !== null}
-                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30 disabled:opacity-35 disabled:cursor-not-allowed"
-                >
-                  击败当前 AI
-                </button>
-                <button
-                  type="button"
-                  onClick={devFillPlayerHealth}
-                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
-                >
-                  补满生命
-                </button>
-                <button
-                  type="button"
-                  onClick={devFillPlayerShield}
-                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
-                >
-                  护盾充满
-                </button>
-                <button
-                  type="button"
-                  onClick={devMaxAllDeities}
-                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30"
-                >
-                  三神满级
-                </button>
-                <button
-                  type="button"
-                  onClick={devClaimCurrentReward}
-                  disabled={!challengeStageClear}
-                  className="rounded border border-white/10 bg-black/30 px-2 py-1.5 text-[9px] font-bold text-white/80 hover:border-cyan-200/35 hover:bg-cyan-950/30 disabled:opacity-35 disabled:cursor-not-allowed"
-                >
-                  奖励测试
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={() => setIsExitLobbyDialogOpen(true)}
-        className="absolute left-[max(190px,calc((100vw-1500px)/2+190px))] top-24 z-[74] rounded-md border border-white/10 bg-black/58 px-3 py-1.5 font-mono text-[10px] font-black tracking-widest text-text-main/80 shadow-[0_0_14px_rgba(0,0,0,0.18)] transition-all hover:border-accent/45 hover:text-accent hover:bg-black/72 active:scale-95"
-      >
-        退出大厅
-      </button>
+            )}
+          </>
+        )}
+        <button
+          type="button"
+          onClick={() => setIsExitLobbyDialogOpen(true)}
+          className="rounded-md border border-white/10 bg-black/58 px-3 py-1.5 text-[10px] font-black tracking-widest text-text-main/80 shadow-[0_0_14px_rgba(0,0,0,0.18)] transition-all hover:border-accent/45 hover:text-accent hover:bg-black/72 active:scale-95"
+        >
+          退出大厅
+        </button>
+      </div>
 
       {/* Main Arena */}
       <div className="flex-1 flex flex-col items-center justify-center gap-4 relative">

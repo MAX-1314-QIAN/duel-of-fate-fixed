@@ -5280,14 +5280,6 @@ export default function App() {
 
       </div>
 
-      {/* Rules Mini Info */}
-      <div className="absolute top-[210px] right-10 text-[10px] text-text-dim/55 tracking-widest font-mono space-y-1.5 text-right pointer-events-none select-none max-w-[210px]">
-        <p className="font-extrabold text-text-dim/80">公共牌库初始数量：{ACTIVE_BALANCE_CONFIG.sharedDeckTotalCards}</p>
-        <p className="text-[9px] text-text-dim/45 leading-tight">{zhCN.resources.sharedDeckRule}</p>
-        <p className="text-[9px] text-text-dim/45 leading-tight">弃牌区：双方独立记录</p>
-        <p className="text-[9px] text-text-dim/45 leading-tight">{zhCN.resources.noReshuffle}</p>
-      </div>
-
       {/* Floating Notice Bar (Warning Prompts) */}
       <AnimatePresence>
         {shortNotice && (

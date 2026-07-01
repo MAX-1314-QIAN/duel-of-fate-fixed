@@ -45,6 +45,7 @@ const INITIAL_HP = ACTIVE_BALANCE_CONFIG.playerInitialMaxHp;
 const PLAYER_BASE_HAND_LIMIT = ACTIVE_BALANCE_CONFIG.playerBaseHandLimit;
 const AI_BASE_HAND_LIMIT = ACTIVE_BALANCE_CONFIG.aiBaseHandLimit;
 const CARD_TYPES: CardType[] = SHARED_DECK_CARD_TYPES;
+const CURRENT_RUN_SAVE_KEY = 'duel-of-fate-current-run-save';
 const CARD_NAME_ZH: Record<CardType, string> = {
   ROCK: '石头',
   PAPER: '布',
@@ -205,6 +206,7 @@ export default function App() {
   const [settlementSubPhase, setSettlementSubPhase] = useState<'resolving' | 'move-to-discard' | 'replenishing' | 'replenish-complete' | 'round-end' | null>(null);
   const [isBattleLogOpen, setIsBattleLogOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
+  const [isExitLobbyDialogOpen, setIsExitLobbyDialogOpen] = useState(false);
   const [logs, setLogs] = useState<string[]>([
     zhCN.logs.battleInitialized,
     '[环境路线] 当前环境：火山',
@@ -558,6 +560,19 @@ export default function App() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [isBattleLogOpen]);
 
+  useEffect(() => {
+    if (!isExitLobbyDialogOpen) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsExitLobbyDialogOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isExitLobbyDialogOpen]);
+
   // Player tactical card drawer and AI deck generator from shared deck
   const replenishHandsWithState = useCallback((
     pHand: Card[],
@@ -805,6 +820,67 @@ export default function App() {
 
   const returnToLobby = () => {
     resetGame();
+    setScreen('HOME');
+    setSelectedProtocol(null);
+  };
+
+  const readCurrentRunSave = () => {
+    try {
+      const rawSave = localStorage.getItem(CURRENT_RUN_SAVE_KEY);
+      return rawSave ? JSON.parse(rawSave) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const saveCurrentRunProgress = () => {
+    const previousSave = readCurrentRunSave();
+    const snapshot = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      previousSavedAt: previousSave?.savedAt ?? null,
+      gameMode,
+      currentChallengeStage,
+      state: stateRef.current,
+      faithState,
+      playerDewdrops: playerDewdropsRef.current,
+      playerFrostSigils: playerFrostSigilsRef.current,
+      playerMaxHp: playerMaxHpRef.current,
+      playerShield: playerShieldRef.current,
+      playerHandLimit: playerHandLimitRef.current,
+      hasClaimedHandSlotReward,
+      selectedStageReward,
+      selectedStageItemReward,
+      claimedStageRewardStages: Array.from(claimedStageRewardStagesRef.current),
+      claimedItemRewardStages: Array.from(claimedItemRewardStagesRef.current),
+      completedClashCount: completedClashCountRef.current,
+      completedClashesSinceMutation: completedClashesSinceMutationRef.current,
+      environmentRouteIndex: environmentRouteIndexRef.current,
+      environmentRoundsRemaining: environmentRoundsRemainingRef.current,
+      enemyScorchMarks: enemyScorchMarksRef.current,
+      bossPressure: bossPressureRef.current,
+      hasTriggeredCoreCombustionThisEnemy,
+      hasTriggeredVerdantSurgeThisEnemy,
+      hasTriggeredBlizzardThisEnemy,
+    };
+
+    localStorage.setItem(CURRENT_RUN_SAVE_KEY, JSON.stringify(snapshot));
+    return snapshot;
+  };
+
+  const clearCurrentRunSave = () => {
+    localStorage.removeItem(CURRENT_RUN_SAVE_KEY);
+  };
+
+  const exitBattleToLobby = (preserveSave: boolean) => {
+    if (preserveSave) {
+      saveCurrentRunProgress();
+    } else {
+      clearCurrentRunSave();
+    }
+
+    setIsExitLobbyDialogOpen(false);
+    resetGame(gameMode);
     setScreen('HOME');
     setSelectedProtocol(null);
   };
@@ -3971,6 +4047,14 @@ export default function App() {
         </div>
       )}
 
+      <button
+        type="button"
+        onClick={() => setIsExitLobbyDialogOpen(true)}
+        className="absolute left-[max(190px,calc((100vw-1500px)/2+190px))] top-24 z-[74] rounded-md border border-white/10 bg-black/58 px-3 py-1.5 font-mono text-[10px] font-black tracking-widest text-text-main/80 shadow-[0_0_14px_rgba(0,0,0,0.18)] transition-all hover:border-accent/45 hover:text-accent hover:bg-black/72 active:scale-95"
+      >
+        退出大厅
+      </button>
+
       {/* Main Arena */}
       <div className="flex-1 flex flex-col items-center justify-center gap-4 relative">
 
@@ -4684,6 +4768,64 @@ export default function App() {
             })}
                 </div>
               </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isExitLobbyDialogOpen && (
+            <>
+              <motion.button
+                type="button"
+                aria-label="关闭退出大厅确认"
+                className="fixed inset-0 z-[118] cursor-default bg-black/55 backdrop-blur-[2px]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.16 }}
+                onClick={() => setIsExitLobbyDialogOpen(false)}
+              />
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="exit-lobby-title"
+                className="fixed left-1/2 top-1/2 z-[119] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/12 bg-[#0b0b10]/96 p-5 font-mono text-text-main shadow-[0_0_38px_rgba(0,0,0,0.42)]"
+                initial={{ opacity: 0, scale: 0.94, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                onClick={event => event.stopPropagation()}
+              >
+                <div id="exit-lobby-title" className="text-center text-[15px] font-black tracking-widest text-accent">
+                  退出大厅
+                </div>
+                <div className="mt-3 text-center text-[12px] font-bold leading-relaxed text-text-dim/80">
+                  是否保留当前进度后返回大厅？
+                </div>
+                <div className="mt-5 grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => exitBattleToLobby(true)}
+                    className="h-10 rounded-lg border border-emerald-300/28 bg-emerald-950/28 text-[11px] font-black tracking-widest text-emerald-100 transition-all hover:border-emerald-200/55 hover:bg-emerald-900/35 active:scale-[0.98]"
+                  >
+                    保留存档退出
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exitBattleToLobby(false)}
+                    className="h-10 rounded-lg border border-red-300/24 bg-red-950/24 text-[11px] font-black tracking-widest text-red-100 transition-all hover:border-red-200/45 hover:bg-red-900/30 active:scale-[0.98]"
+                  >
+                    不保留存档退出
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsExitLobbyDialogOpen(false)}
+                    className="h-9 rounded-lg border border-white/10 bg-white/[0.04] text-[10px] font-black tracking-widest text-text-dim transition-all hover:border-white/24 hover:text-white active:scale-[0.98]"
+                  >
+                    取消
+                  </button>
+                </div>
+              </motion.div>
             </>
           )}
         </AnimatePresence>

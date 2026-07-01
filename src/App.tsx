@@ -40,12 +40,19 @@ import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode, getChallengeAiStage
 import { CHALLENGE_REWARD_CONFIG, STAGE_ITEM_REWARDS, StageItemRewardId, isItemRewardStage } from './game/rewards';
 import { DEV_TOOLS_CONFIG, DEV_TOOLS_ENABLED } from './game/dev';
 import { ACTIVE_BALANCE_CONFIG, SHARED_DECK_CARD_TYPES } from './game/balance';
+import {
+  CHALLENGE_RUN_SAVE_SCHEMA_VERSION,
+  ChallengeRunSave,
+  clearChallengeRun,
+  hasChallengeRunSave,
+  loadChallengeRun,
+  saveChallengeRun,
+} from './game/save';
 
 const INITIAL_HP = ACTIVE_BALANCE_CONFIG.playerInitialMaxHp;
 const PLAYER_BASE_HAND_LIMIT = ACTIVE_BALANCE_CONFIG.playerBaseHandLimit;
 const AI_BASE_HAND_LIMIT = ACTIVE_BALANCE_CONFIG.aiBaseHandLimit;
 const CARD_TYPES: CardType[] = SHARED_DECK_CARD_TYPES;
-const CURRENT_RUN_SAVE_KEY = 'duel-of-fate-current-run-save';
 const CARD_NAME_ZH: Record<CardType, string> = {
   ROCK: '石头',
   PAPER: '布',
@@ -419,6 +426,7 @@ export default function App() {
 
   const [screen, setScreen] = useState<'HOME' | 'BATTLE'>('HOME');
   const [selectedProtocol, setSelectedProtocol] = useState<'QUICK' | 'TRAINING' | 'CHALLENGE' | null>(null);
+  const [hasValidChallengeSave, setHasValidChallengeSave] = useState(() => hasChallengeRunSave());
   const [gameMode, setGameMode] = useState<GameMode>('QUICK');
   const [currentChallengeStage, setCurrentChallengeStage] = useState(1);
   const [faithState, setFaithState] = useState<FaithState>(() => createInitialFaithState());
@@ -824,24 +832,14 @@ export default function App() {
     setSelectedProtocol(null);
   };
 
-  const readCurrentRunSave = () => {
-    try {
-      const rawSave = localStorage.getItem(CURRENT_RUN_SAVE_KEY);
-      return rawSave ? JSON.parse(rawSave) : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const saveCurrentRunProgress = () => {
-    const previousSave = readCurrentRunSave();
-    const snapshot = {
-      version: 1,
+  const createChallengeRunSnapshot = (): ChallengeRunSave => ({
+      schemaVersion: CHALLENGE_RUN_SAVE_SCHEMA_VERSION,
       savedAt: new Date().toISOString(),
-      previousSavedAt: previousSave?.savedAt ?? null,
       gameMode,
-      currentChallengeStage,
+      challengeStage: currentChallengeStage,
       state: stateRef.current,
+      logs,
+      challengeStageClear,
       faithState,
       playerDewdrops: playerDewdropsRef.current,
       playerFrostSigils: playerFrostSigilsRef.current,
@@ -862,27 +860,115 @@ export default function App() {
       hasTriggeredCoreCombustionThisEnemy,
       hasTriggeredVerdantSurgeThisEnemy,
       hasTriggeredBlizzardThisEnemy,
-    };
+  });
 
-    localStorage.setItem(CURRENT_RUN_SAVE_KEY, JSON.stringify(snapshot));
+  const saveCurrentRunProgress = () => {
+    if (gameMode !== 'CHALLENGE') return null;
+    const snapshot = createChallengeRunSnapshot();
+    saveChallengeRun(snapshot);
+    setHasValidChallengeSave(true);
     return snapshot;
   };
 
-  const clearCurrentRunSave = () => {
-    localStorage.removeItem(CURRENT_RUN_SAVE_KEY);
+  const restoreChallengeRun = (save: ChallengeRunSave) => {
+    invalidateBattleSession();
+    battleFrozenRef.current = false;
+    clearPendingBattleTimers();
+    clearTransientBattleVisuals();
+
+    stateRef.current = save.state as GameState;
+    setState(save.state as GameState);
+    setLogs(save.logs);
+    setChallengeStageClear(save.challengeStageClear as typeof challengeStageClear);
+    setGameMode('CHALLENGE');
+    setCurrentChallengeStage(save.challengeStage);
+    setFaithState(save.faithState as FaithState);
+    playerDewdropsRef.current = save.playerDewdrops;
+    setPlayerDewdrops(save.playerDewdrops);
+    playerFrostSigilsRef.current = save.playerFrostSigils;
+    setPlayerFrostSigils(save.playerFrostSigils);
+    playerMaxHpRef.current = save.playerMaxHp;
+    setPlayerMaxHp(save.playerMaxHp);
+    playerShieldRef.current = save.playerShield;
+    setPlayerShield(save.playerShield);
+    playerHandLimitRef.current = save.playerHandLimit;
+    setPlayerHandLimit(save.playerHandLimit);
+    setHasClaimedHandSlotReward(save.hasClaimedHandSlotReward);
+    setSelectedStageReward(save.selectedStageReward as StageRewardState);
+    setSelectedStageItemReward(save.selectedStageItemReward as StageItemRewardState);
+    claimedStageRewardStagesRef.current = new Set(save.claimedStageRewardStages);
+    claimedItemRewardStagesRef.current = new Set(save.claimedItemRewardStages);
+    completedClashCountRef.current = save.completedClashCount;
+    setCompletedClashCount(save.completedClashCount);
+    completedClashesSinceMutationRef.current = save.completedClashesSinceMutation;
+    setCompletedClashesSinceMutation(save.completedClashesSinceMutation);
+    environmentRouteIndexRef.current = save.environmentRouteIndex;
+    setEnvironmentRouteIndex(save.environmentRouteIndex);
+    environmentRoundsRemainingRef.current = save.environmentRoundsRemaining;
+    setEnvironmentRoundsRemaining(save.environmentRoundsRemaining);
+    enemyScorchMarksRef.current = save.enemyScorchMarks;
+    setEnemyScorchMarks(save.enemyScorchMarks);
+    bossPressureRef.current = save.bossPressure;
+    setBossPressure(save.bossPressure);
+    setHasTriggeredCoreCombustionThisEnemy(save.hasTriggeredCoreCombustionThisEnemy);
+    setHasTriggeredVerdantSurgeThisEnemy(save.hasTriggeredVerdantSurgeThisEnemy);
+    setHasTriggeredBlizzardThisEnemy(save.hasTriggeredBlizzardThisEnemy);
+
+    setSelectedCards([]);
+    setClashResult(null);
+    setIsProcessing(false);
+    setSettlementSubPhase(null);
+    setIsRerollMode(false);
+    setRerollSelectedCardId(null);
+    setOfferingPickerCardId(null);
+    setActiveDiscardModal(null);
+    setGlacierEchoCandidates([]);
+    continueAfterGlacierEchoRef.current = null;
+    continueAfterMutationRef.current = null;
+    setIsDevPanelOpen(false);
+    setIsExitLobbyDialogOpen(false);
+    setLogs(prev => [...prev, '[存档] 已恢复挑战进度']);
+    setScreen('BATTLE');
+    setSelectedProtocol('CHALLENGE');
   };
 
   const exitBattleToLobby = (preserveSave: boolean) => {
-    if (preserveSave) {
+    if (preserveSave && gameMode === 'CHALLENGE') {
       saveCurrentRunProgress();
-    } else {
-      clearCurrentRunSave();
+    } else if (gameMode === 'CHALLENGE') {
+      clearChallengeRun();
+      setHasValidChallengeSave(false);
     }
 
     setIsExitLobbyDialogOpen(false);
     resetGame(gameMode);
     setScreen('HOME');
     setSelectedProtocol(null);
+  };
+
+  const startNewChallengeRun = () => {
+    clearChallengeRun();
+    setHasValidChallengeSave(false);
+    setHomeLogs(prev => [
+      ...prev,
+      zhCN.logs.initializingBattlefield,
+    ]);
+    setTimeout(() => {
+      resetGame('CHALLENGE');
+      setScreen('BATTLE');
+    }, 800);
+  };
+
+  const continueSavedChallengeRun = () => {
+    const save = loadChallengeRun();
+    if (!save) {
+      setHasValidChallengeSave(false);
+      setHomeLogs(prev => [...prev, '[存档] 暂无可继续的挑战存档']);
+      return;
+    }
+
+    setHasValidChallengeSave(true);
+    restoreChallengeRun(save);
   };
 
   const showMutationPhaseNotice = useCallback((message: string, duration = 700) => {
@@ -3730,27 +3816,32 @@ export default function App() {
                 </p>
               </div>
 
-              <button
-                disabled={selectedProtocol !== 'CHALLENGE'}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setHomeLogs(prev => [
-                    ...prev,
-                    zhCN.logs.initializingBattlefield,
-                  ]);
-                  setTimeout(() => {
-                    resetGame('CHALLENGE');
-                    setScreen('BATTLE');
-                  }, 800);
-                }}
-                className={`w-full py-2.5 rounded-lg text-xs font-black tracking-widest uppercase transition-all duration-300 cursor-pointer disabled:cursor-not-allowed ${
-                  selectedProtocol === 'CHALLENGE'
-                    ? 'bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-fuchsia-500/15'
-                    : 'bg-fuchsia-950/20 text-fuchsia-400/35 border border-fuchsia-900/30'
-                }`}
-              >
-                {zhCN.home.startBattle}
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startNewChallengeRun();
+                  }}
+                  className="py-2.5 rounded-lg text-[11px] font-black tracking-widest uppercase transition-all duration-300 cursor-pointer bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-fuchsia-500/15"
+                >
+                  重新开始
+                </button>
+                <button
+                  disabled={!hasValidChallengeSave}
+                  title={hasValidChallengeSave ? undefined : '暂无存档'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    continueSavedChallengeRun();
+                  }}
+                  className={`py-2.5 rounded-lg text-[11px] font-black tracking-widest uppercase transition-all duration-300 ${
+                    hasValidChallengeSave
+                      ? 'cursor-pointer bg-cyan-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-cyan-500/15'
+                      : 'cursor-not-allowed bg-fuchsia-950/20 text-fuchsia-400/35 border border-fuchsia-900/30'
+                  }`}
+                >
+                  {hasValidChallengeSave ? '继续作战' : '暂无存档'}
+                </button>
+              </div>
             </div>
           </div>
 

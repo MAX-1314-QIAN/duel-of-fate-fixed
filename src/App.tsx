@@ -40,6 +40,7 @@ import { CHALLENGE_STAGE_CONFIG, GAME_MODE_CONFIG, GameMode, getChallengeAiStage
 import { CHALLENGE_REWARD_CONFIG, STAGE_ITEM_REWARDS, StageItemRewardId, isItemRewardStage } from './game/rewards';
 import { DEV_TOOLS_CONFIG, DEV_TOOLS_ENABLED } from './game/dev';
 import { ACTIVE_BALANCE_CONFIG, SHARED_DECK_CARD_TYPES } from './game/balance';
+import { playSoundEffect } from './game/audio';
 import {
   CHALLENGE_RUN_SAVE_SCHEMA_VERSION,
   ChallengeRunSave,
@@ -589,6 +590,9 @@ export default function App() {
   const [activeAnims, setActiveAnims] = useState<any[]>([]);
 
   const addAnimation = useCallback((type: 'DRAW' | 'DISCARD' | 'SHUFFLE' | 'DRAW_PLAYER' | 'DRAW_AI', startX: number, startY: number, endX: number, endY: number, cardType?: CardType) => {
+    if (type === 'DRAW' || type === 'DRAW_PLAYER' || type === 'DRAW_AI') {
+      playSoundEffect('cardDraw', isMuted);
+    }
     setActiveAnims(prev => [
       ...prev,
       {
@@ -601,7 +605,7 @@ export default function App() {
         cardType,
       },
     ]);
-  }, []);
+  }, [isMuted]);
 
   const removeAnimation = useCallback((id: string) => {
     setActiveAnims(prev => prev.filter(anim => anim.id !== id));
@@ -1553,6 +1557,7 @@ export default function App() {
           aiHand = aiHand.map(applyMutationToCard(selectedAiCard.id, activeMutationType, completedClashCountRef.current));
           logsToAppend.push('[环境事件] 对手获得 1 张异变牌');
           logsToAppend.push(`[对手异变牌] 当前总数：${countAllMutatedCards(aiHand)} / ${mutationLimit}`);
+          playSoundEffect('mutation', isMuted);
           setMutationAnimation({ side: 'AI', token: Date.now() });
           setAiMutationCountPulse(true);
           showMutationPhaseNotice('对手完成感染', 700);
@@ -1598,7 +1603,7 @@ export default function App() {
         continueTurn();
       }, 300);
     }
-  }, [activeMutationLabel, activeMutationType, getActiveMutationCandidates, mutationLimit, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded]);
+  }, [activeMutationLabel, activeMutationType, getActiveMutationCandidates, isMuted, mutationLimit, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded]);
 
   const handleMutationPick = useCallback((cardId: string) => {
     const selectedCandidate = mutationCandidates.find(card => card.id === cardId);
@@ -1606,6 +1611,7 @@ export default function App() {
 
     setMutationCandidates([]);
     pulseMutationEvent();
+    playSoundEffect('mutation', isMuted);
     setMutationAnimation({ side: 'PLAYER', cardId, token: Date.now() });
     scheduleSettlementTimer(() => {
       finishMutationStage(cardId);
@@ -1613,7 +1619,7 @@ export default function App() {
         setMutationAnimation(null);
       }, 160);
     }, 620);
-  }, [finishMutationStage, mutationCandidates, pulseMutationEvent, scheduleSettlementTimer]);
+  }, [finishMutationStage, isMuted, mutationCandidates, pulseMutationEvent, scheduleSettlementTimer]);
 
   const handleGlacierEchoPick = useCallback((cardId: string) => {
     const selectedCandidate = glacierEchoCandidates.find(card => card.id === cardId);
@@ -2098,6 +2104,10 @@ export default function App() {
       forestMutationCountdownReduction,
       noDefense: gCards.length === 0,
     });
+
+    if (playerDamage > 0 || aiDamage > 0) {
+      playSoundEffect('hit', isMuted);
+    }
 
     scheduleSettlementTimer(() => {
       if (playerDamage > 0) {
@@ -2714,7 +2724,7 @@ export default function App() {
     }, 850);
 
     setSelectedCards([]);
-  }, [activeMutationLabel, activeMutationType, addAnimation, bossPressureBonusDamage, bossPressureThreshold, clearSettlementTimers, completedClashCount, currentAiMaxHP, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.DEER_SPIRIT.level, faithState.FROST_LORD.level, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, isBossPressureActive, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
+  }, [activeMutationLabel, activeMutationType, addAnimation, bossPressureBonusDamage, bossPressureThreshold, clearSettlementTimers, completedClashCount, currentAiMaxHP, currentChallengeStage, currentModeConfig.environmentMode, enterChallengeStageClear, faithState.DEER_SPIRIT.level, faithState.FROST_LORD.level, faithState.KITCHEN_GOD.level, finishMutationStage, gameMode, getActiveMutationCandidates, isBossPressureActive, isMuted, mutationIntervalRounds, mutationLimit, pulseMutationEvent, scheduleSettlementTimer, showMutationPhaseNotice, switchToNextEnvironmentIfNeeded, triggerDeckFeedback]);
 
   // --- AI LOGIC ---
   const executeAiMove = useCallback(() => {
@@ -2885,6 +2895,7 @@ export default function App() {
 
   useEffect(() => {
     if (state.phase === 'REVEAL') {
+      playSoundEffect('cardReveal', isMuted);
       const timer = scheduleSettlementTimer(() => {
         setState(prev => ({
           ...prev,
@@ -2893,7 +2904,7 @@ export default function App() {
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [scheduleSettlementTimer, state.phase]);
+  }, [isMuted, scheduleSettlementTimer, state.phase]);
 
   useEffect(() => {
     if (state.phase === 'RESOLVE' && !isProcessing) {
@@ -3432,6 +3443,7 @@ export default function App() {
         return;
       }
 
+      playSoundEffect('cardPlay', isMuted);
       setState(prev => ({
         ...prev,
         playerHand: prev.playerHand.filter(c => !selectedCards.includes(c.id)),
@@ -3446,6 +3458,7 @@ export default function App() {
         return;
       }
 
+      playSoundEffect('cardPlay', isMuted);
       setState(prev => ({
         ...prev,
         playerHand: prev.playerHand.filter(c => !selectedCards.includes(c.id)),
@@ -3479,11 +3492,13 @@ export default function App() {
 
   const toggleSelect = (id: string) => {
     if (isRerollMode) {
+      playSoundEffect('cardSelect', isMuted);
       setRerollSelectedCardId(prev => prev === id ? null : id);
       return;
     }
 
     if (selectedCards.includes(id)) {
+      playSoundEffect('cardSelect', isMuted);
       setSelectedCards(prev => prev.filter(i => i !== id));
       return;
     }
@@ -3517,6 +3532,7 @@ export default function App() {
       }
     }
 
+    playSoundEffect('cardSelect', isMuted);
     setSelectedCards(prev => [...prev, id]);
   };
 

@@ -186,17 +186,24 @@ const CardArtLayer = ({ card }: { card: Card }) => (
     <AssetImage
       src={ART_ASSETS.cardBase[card.type]}
       alt={cardLabel(card.type)}
-      className="absolute inset-0 h-full w-full rounded-[inherit] object-cover"
+      className="absolute inset-0 z-[1] h-full w-full rounded-[inherit] object-cover"
     />
     {card.mutationType && (
       <AssetImage
         src={ART_ASSETS.mutationFrames[card.mutationType]}
         alt={environmentLabel(card.mutationType)}
-        className="absolute inset-0 z-[3] h-full w-full rounded-[inherit] object-fill pointer-events-none"
+        className="absolute inset-0 z-[4] h-full w-full rounded-[inherit] object-cover pointer-events-none"
       />
     )}
-    <div className="absolute inset-0 rounded-[inherit] bg-gradient-to-b from-black/0 via-black/5 to-black/58 pointer-events-none" />
+    <div className="absolute inset-0 z-[2] rounded-[inherit] bg-gradient-to-b from-black/0 via-black/5 to-black/28 pointer-events-none" />
   </>
+);
+
+const CardFaceFallback = ({ card, className = '' }: { card: Card; className?: string }) => (
+  <div className={`absolute inset-0 z-0 flex flex-col items-center justify-center ${className}`}>
+    <CardIcon type={card.type} className="text-4xl mb-2" />
+    <span className="text-[10px] font-bold tracking-wider text-text-dim">{cardLabel(card.type)}</span>
+  </div>
 );
 
 const CardBackArt = ({ className }: { className: string }) => (
@@ -5354,14 +5361,15 @@ export default function App() {
                       ${isSelected ? 'border-accent -translate-y-4 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'border-border'}
                     `}
                   >
+                    <CardFaceFallback card={card} />
                     <CardArtLayer card={card} />
                     {maturedCardGlowIds[card.id] && (
                       <div className="absolute -top-7 left-1/2 -translate-x-1/2 rounded-md border border-emerald-400/35 bg-black/75 px-2 py-1 text-[10px] font-black tracking-widest text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.22)] pointer-events-none">
                         🌿 已成熟
                       </div>
                     )}
-                    <CardIcon type={card.type} className="relative z-10 text-4xl mb-2" />
-                    <div className="relative z-10 text-[10px] font-bold tracking-wider text-text-dim">
+                    <CardIcon type={card.type} className="hidden" />
+                    <div className="hidden">
                       {card.mutationType === 'VOLCANO'
                         ? volcanoCardLabel(card.type)
                         : card.mutationType === 'FOREST'
@@ -5371,7 +5379,7 @@ export default function App() {
                           : cardLabel(card.type)}
                     </div>
                     {card.mutationType === 'FOREST' && (
-                      <div className="relative z-10 mt-0.5 text-[9px] font-black tracking-widest text-emerald-200/85">
+                      <div className="absolute bottom-1.5 left-1/2 z-10 -translate-x-1/2 rounded border border-emerald-300/30 bg-[#06130e]/82 px-1.5 py-0.5 text-[8px] font-black tracking-widest text-emerald-200/85">
                         {forestStageLabel(card)}
                       </div>
                     )}
@@ -5943,10 +5951,11 @@ export default function App() {
                     title={`返回手牌后仍保留冰川属性\n每张冰川牌最多保留 1 次`}
                     className={`glacier-echo-candidate group w-[126px] h-[154px] rounded-xl bg-surface border border-cyan-300/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-cyan-200 hover:-translate-y-1 transition-all overflow-hidden ${getCardBorderClass(card.type)}`}
                   >
+                    <CardFaceFallback card={card} />
                     <CardArtLayer card={card} />
                     <div className="absolute top-2 right-2 text-[14px] drop-shadow-[0_0_6px_rgba(125,211,252,0.45)]" aria-hidden="true">❄️</div>
-                    <CardIcon type={card.type} className="text-4xl mb-2" />
-                    <div className="relative z-10 text-[10px] font-bold tracking-wider text-text-dim leading-relaxed">
+                    <CardIcon type={card.type} className="hidden" />
+                    <div className="hidden">
                       <div>{glacierCardLabel(card.type)}</div>
                       <div className="text-cyan-100/90">保留冰川属性</div>
                     </div>
@@ -5992,12 +6001,13 @@ export default function App() {
                     }
                     className={`group w-[126px] h-[154px] rounded-xl bg-surface border ${isVolcanoEnvironment ? 'border-orange-500/30 hover:border-orange-300' : isGlacierEnvironment ? 'border-cyan-300/30 hover:border-cyan-200' : 'border-emerald-500/30 hover:border-emerald-300'} flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:-translate-y-1 transition-all overflow-hidden ${getCardBorderClass(card.type)}`}
                   >
+                    <CardFaceFallback card={card} />
                     <CardArtLayer card={card} />
                     <div className={`absolute top-2 right-2 text-[14px] ${isVolcanoEnvironment ? 'drop-shadow-[0_0_6px_rgba(251,146,60,0.45)]' : isGlacierEnvironment ? 'drop-shadow-[0_0_6px_rgba(125,211,252,0.45)]' : 'drop-shadow-[0_0_6px_rgba(52,211,153,0.45)]'}`} aria-hidden="true">
                       {isVolcanoEnvironment ? '🔥' : isGlacierEnvironment ? '❄️' : '🌱'}
                     </div>
-                    <CardIcon type={card.type} className="text-4xl mb-2" />
-                    <div className="relative z-10 text-[10px] font-bold tracking-wider text-text-dim leading-relaxed">
+                    <CardIcon type={card.type} className="hidden" />
+                    <div className="hidden">
                       <div>普通{plainCardLabel(card.type)}</div>
                       <div className={isVolcanoEnvironment ? 'text-orange-200/90' : isGlacierEnvironment ? 'text-cyan-100/90' : 'text-emerald-200/90'}>
                         → {isForestEnvironment ? `${forestCardLabel(card.type)}·幼苗` : activeMutationCardLabel(card.type)}
@@ -6786,9 +6796,10 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
       animate={{ scale: 1, opacity: 1, y: 0 }}
       className={`w-[90px] h-[120px] rounded-xl bg-surface border border-border flex flex-col items-center justify-center relative shadow-xl overflow-hidden ${getCardBorderClass(card.type)} ${card.mutationType === 'VOLCANO' ? 'lava-card' : ''} ${card.mutationType === 'FOREST' ? `forest-card forest-card--${card.forestGrowthStage === 'MATURE' ? 'mature' : 'seedling'}` : ''} ${card.mutationType === 'GLACIER' ? `glacier-card ${card.glacierEchoUsed ? 'glacier-card--echo-used' : ''}` : ''}`}
     >
+      <CardFaceFallback card={card} />
       <CardArtLayer card={card} />
-      <CardIcon type={card.type} className="relative z-10 text-3xl mb-1" />
-      <span className="relative z-10 text-[9px] font-black tracking-widest opacity-70">
+      <CardIcon type={card.type} className="hidden" />
+      <span className="hidden">
         {card.mutationType === 'VOLCANO'
           ? volcanoCardLabel(card.type)
           : card.mutationType === 'FOREST'
@@ -6798,7 +6809,7 @@ function BattleCard({ card, faceDown }: { card: Card; faceDown?: boolean; key?: 
             : cardLabel(card.type)}
       </span>
       {card.mutationType === 'FOREST' && (
-        <span className="relative z-10 mt-0.5 text-[8px] font-black tracking-widest text-emerald-200/80">
+        <span className="absolute bottom-1.5 left-1/2 z-10 -translate-x-1/2 rounded border border-emerald-300/30 bg-[#06130e]/82 px-1.5 py-0.5 text-[8px] font-black tracking-widest text-emerald-200/80">
           {forestStageLabel(card)}
         </span>
       )}

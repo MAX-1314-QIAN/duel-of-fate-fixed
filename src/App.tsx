@@ -56,50 +56,50 @@ const AI_BASE_HAND_LIMIT = ACTIVE_BALANCE_CONFIG.aiBaseHandLimit;
 const CARD_TYPES: CardType[] = SHARED_DECK_CARD_TYPES;
 const CARD_NAME_ZH: Record<CardType, string> = {
   ROCK: '石头',
-  PAPER: '布',
+  PAPER: '�?,
   SCISSORS: '剪刀',
 };
 
 const ART_ASSETS = {
-  battleBackground: '/assets/backgrounds/battle-main.webp',
+  battleBackground: './assets/backgrounds/battle-main.webp',
   cardBase: {
-    ROCK: '/assets/cards/base/rock.webp',
-    PAPER: '/assets/cards/base/paper.webp',
-    SCISSORS: '/assets/cards/base/scissors.webp',
+    ROCK: './assets/cards/base/rock.webp',
+    PAPER: './assets/cards/base/paper.webp',
+    SCISSORS: './assets/cards/base/scissors.webp',
   },
-  cardBack: '/assets/cards/backs/card-back.webp',
+  cardBack: './assets/cards/backs/card-back.webp',
   cardMutations: {
     VOLCANO: {
-      ROCK: '/assets/cards/mutations/volcano-rock.webp',
-      PAPER: '/assets/cards/mutations/volcano-paper.webp',
-      SCISSORS: '/assets/cards/mutations/volcano-scissors.webp',
+      ROCK: './assets/cards/mutations/volcano-rock.webp',
+      PAPER: './assets/cards/mutations/volcano-paper.webp',
+      SCISSORS: './assets/cards/mutations/volcano-scissors.webp',
     },
     GLACIER: {
-      ROCK: '/assets/cards/mutations/glacier-rock.webp',
-      PAPER: '/assets/cards/mutations/glacier-paper.webp',
-      SCISSORS: '/assets/cards/mutations/glacier-scissors.webp',
+      ROCK: './assets/cards/mutations/glacier-rock.webp',
+      PAPER: './assets/cards/mutations/glacier-paper.webp',
+      SCISSORS: './assets/cards/mutations/glacier-scissors.webp',
     },
     FOREST: {
       SEEDLING: {
-        ROCK: '/assets/cards/mutations/forest-seedling-rock.webp',
-        PAPER: '/assets/cards/mutations/forest-seedling-paper.webp',
-        SCISSORS: '/assets/cards/mutations/forest-seedling-scissors.webp',
+        ROCK: './assets/cards/mutations/forest-seedling-rock.webp',
+        PAPER: './assets/cards/mutations/forest-seedling-paper.webp',
+        SCISSORS: './assets/cards/mutations/forest-seedling-scissors.webp',
       },
       MATURE: {
-        ROCK: '/assets/cards/mutations/forest-mature-rock.webp',
-        PAPER: '/assets/cards/mutations/forest-mature-paper.webp',
-        SCISSORS: '/assets/cards/mutations/forest-mature-scissors.webp',
+        ROCK: './assets/cards/mutations/forest-mature-rock.webp',
+        PAPER: './assets/cards/mutations/forest-mature-paper.webp',
+        SCISSORS: './assets/cards/mutations/forest-mature-scissors.webp',
       },
     },
   },
   deities: {
-    KITCHEN_GOD: '/assets/deities/deity-kitchen-god.webp',
-    DEER_SPIRIT: '/assets/deities/deity-deer-spirit.webp',
-    FROST_LORD: '/assets/deities/deity-frost-lord.webp',
+    KITCHEN_GOD: './assets/deities/deity-kitchen-god.webp',
+    DEER_SPIRIT: './assets/deities/deity-deer-spirit.webp',
+    FROST_LORD: './assets/deities/deity-frost-lord.webp',
   },
   ui: {
-    sharedDeck: '/assets/ui/icons/icon-shared-deck.webp',
-    discardPile: '/assets/ui/icons/icon-discard-pile.webp',
+    sharedDeck: './assets/ui/icons/icon-shared-deck.webp',
+    discardPile: './assets/ui/icons/icon-discard-pile.webp',
   },
 } as const;
 
@@ -166,22 +166,22 @@ const buildVolcanoDamageLog = (damagingCards: Card[], volcanoBonus: number) => {
   const volcanoCards = damagingCards.filter(card => card.mutationType === 'VOLCANO');
 
   if (volcanoCards.length === 1) {
-    return `[火山异变] 附加伤害：+${Math.min(1, VOLCANO_ENVIRONMENT_CONFIG.maxMutationDamageBonusPerClash)}`;
+    return `[火山异变] 附加伤害�?${Math.min(1, VOLCANO_ENVIRONMENT_CONFIG.maxMutationDamageBonusPerClash)}`;
   }
 
   if (volcanoCards.length > volcanoBonus) {
-    return `[火山异变] 成功命中 ${volcanoCards.length} 张，附加伤害上限生效：+${volcanoBonus}`;
+    return `[火山异变] 成功命中 ${volcanoCards.length} 张，附加伤害上限生效�?${volcanoBonus}`;
   }
 
-  return `[火山异变] 附加伤害：+${volcanoBonus}`;
+  return `[火山异变] 附加伤害�?${volcanoBonus}`;
 };
 
 const CardIcon = ({ type, className }: { type: CardType; className?: string }) => {
   switch (type) {
     case 'ROCK':
-      return <div className={`flex items-center justify-center font-bold ${className}`}>✊</div>;
+      return <div className={`flex items-center justify-center font-bold ${className}`}>�?/div>;
     case 'PAPER':
-      return <div className={`flex items-center justify-center font-bold ${className}`}>✋</div>;
+      return <div className={`flex items-center justify-center font-bold ${className}`}>�?/div>;
     case 'SCISSORS':
       return <div className={`flex items-center justify-center font-bold ${className}`}>✌️</div>;
   }
@@ -334,8 +334,8 @@ export default function App() {
   const [isExitLobbyDialogOpen, setIsExitLobbyDialogOpen] = useState(false);
   const [logs, setLogs] = useState<string[]>([
     zhCN.logs.battleInitialized,
-    '[环境路线] 当前环境：火山',
-    '[环境路线] 下一环境：森林',
+    '[环境路线] 当前环境：火�?,
+    '[环境路线] 下一环境：森�?,
   ]);
   
   const [isRerollMode, setIsRerollMode] = useState<boolean>(false);
@@ -479,7 +479,7 @@ export default function App() {
     const logs: string[] = [];
 
     if (absorbed > 0) {
-      logs.push(`[护盾] 吸收 ${absorbed} 点伤害：${shieldBefore} → ${shieldAfter}`);
+      logs.push(`[护盾] 吸收 ${absorbed} 点伤害：${shieldBefore} �?${shieldAfter}`);
       if (hpDamage > 0) {
         logs.push(`[伤害] 剩余 ${hpDamage} 点伤害扣除玩家生命`);
       }
@@ -647,7 +647,7 @@ export default function App() {
   // Sync logs and support line breaks
   useEffect(() => {
     if (state.lastAction) {
-      if (state.lastAction.includes('系统重启') || state.lastAction.includes('任务开始') || state.lastAction === '游戏开始，你是主场') {
+      if (state.lastAction.includes('系统重启') || state.lastAction.includes('任务开�?) || state.lastAction === '游戏开始，你是主场') {
         const lines = state.lastAction.split('\n').map(l => l.trim()).filter(Boolean);
         setLogs(lines);
       } else {
@@ -779,7 +779,7 @@ export default function App() {
       return {
         state: snapshot,
         recycled: false,
-        logs: ['[公共牌库] 没有可回收卡牌，进入最终交锋'],
+        logs: ['[公共牌库] 没有可回收卡牌，进入最终交�?],
       };
     }
 
@@ -805,9 +805,9 @@ export default function App() {
         `[公共牌库] 回收对手弃牌区：${aiDiscardCount} 张`,
         `[公共牌库] 回收奉纳区：${offeringCount} 张`,
         ...(offeringCount > 0 ? ['[公共牌库] 奉纳异变牌已恢复为普通牌'] : []),
-        `[公共牌库] 异变牌恢复为普通牌：${recycleResult.normalizedMutationCount} 张`,
-        '[公共牌库] 已重新洗牌',
-        `[公共牌库] 当前剩余：${nextState.drawPile.length} 张`,
+        `[公共牌库] 异变牌恢复为普通牌�?{recycleResult.normalizedMutationCount} 张`,
+        '[公共牌库] 已重新洗�?,
+        `[公共牌库] 当前剩余�?{nextState.drawPile.length} 张`,
       ],
     };
   }, []);
@@ -818,7 +818,7 @@ export default function App() {
       setLogs(prev => [...prev, ...recycle.logs]);
     }
     if (recycle.recycled) {
-      triggerDeckFeedback('公共牌库已耗尽', '弃牌回收完成，公共牌库已重新洗牌', `+${recycle.state.drawPile.length}`, `0 → ${recycle.state.drawPile.length}`);
+      triggerDeckFeedback('公共牌库已耗尽', '弃牌回收完成，公共牌库已重新洗牌', `+${recycle.state.drawPile.length}`, `0 �?${recycle.state.drawPile.length}`);
     }
     return recycle;
   }, [recycleSharedDeckIfPossible, triggerDeckFeedback]);
@@ -943,18 +943,18 @@ export default function App() {
     setLogs(mode === 'QUICK'
       ? [
           zhCN.logs.reset,
-          `[模式] 当前模式：${modeConfig.name}`,
-          `[环境事件] 当前环境：${environmentLabel(initialEnvironment)}`,
+          `[模式] 当前模式�?{modeConfig.name}`,
+          `[环境事件] 当前环境�?{environmentLabel(initialEnvironment)}`,
           `[环境事件] 下一次感染：${modeConfig.mutationIntervalRounds} 轮后`,
         ]
       : [
           zhCN.logs.reset,
-          `[模式] 当前模式：${modeConfig.name}`,
-          `[挑战模式] 进入第 1 / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
-          `[对手] 当前生命：${initialAiHP} / ${initialAiHP}`,
-          `[对手] 当前 AI 类型：${getChallengeAiStageConfig(1).name}`,
-          '[环境路线] 火山 → 森林 → 冰川',
-          `[环境路线] 当前环境：${environmentLabel(initialEnvironment)}`,
+          `[模式] 当前模式�?{modeConfig.name}`,
+          `[挑战模式] 进入�?1 / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
+          `[对手] 当前生命�?{initialAiHP} / ${initialAiHP}`,
+          `[对手] 当前 AI 类型�?{getChallengeAiStageConfig(1).name}`,
+          '[环境路线] 火山 �?森林 �?冰川',
+          `[环境路线] 当前环境�?{environmentLabel(initialEnvironment)}`,
           `[环境事件] 下一次感染：${modeConfig.mutationIntervalRounds} 轮后`,
         ]
     );
@@ -1061,7 +1061,7 @@ export default function App() {
     continueAfterMutationRef.current = null;
     setIsDevPanelOpen(false);
     setIsExitLobbyDialogOpen(false);
-    setLogs(prev => [...prev, '[存档] 已恢复挑战进度']);
+    setLogs(prev => [...prev, '[存档] 已恢复挑战进�?]);
     setScreen('BATTLE');
     setSelectedProtocol('CHALLENGE');
   };
@@ -1176,11 +1176,11 @@ export default function App() {
     setEnvironmentSwitchNotice({ from, to, token: Date.now() });
     setLogs(prev => [
       ...prev,
-      `[环境切换] ${environmentLabel(from)} → ${environmentLabel(to)}`,
-      `[环境路线] 当前环境：${environmentLabel(to)}`,
-      `[环境路线] 下一环境：${environmentLabel(currentEnvironmentRoute[(nextIndex + 1) % currentEnvironmentRoute.length])}`,
+      `[环境切换] ${environmentLabel(from)} �?${environmentLabel(to)}`,
+      `[环境路线] 当前环境�?{environmentLabel(to)}`,
+      `[环境路线] 下一环境�?{environmentLabel(currentEnvironmentRoute[(nextIndex + 1) % currentEnvironmentRoute.length])}`,
     ]);
-    showMutationPhaseNotice(`环境切换：${ENVIRONMENT_CONFIG_BY_ID[from].icon} ${environmentLabel(from)} → ${ENVIRONMENT_CONFIG_BY_ID[to].icon} ${environmentLabel(to)}`, 850);
+    showMutationPhaseNotice(`环境切换�?{ENVIRONMENT_CONFIG_BY_ID[from].icon} ${environmentLabel(from)} �?${ENVIRONMENT_CONFIG_BY_ID[to].icon} ${environmentLabel(to)}`, 850);
     scheduleSettlementTimer(() => {
       setEnvironmentSwitchNotice(null);
     }, 900);
@@ -1224,13 +1224,13 @@ export default function App() {
     });
     setLogs(prev => [
       ...prev,
-      `[挑战模式] 第 ${currentChallengeStage} 关完成`,
-      '[挑战模式] 关卡结算已冻结，等待进入下一关',
+      `[挑战模式] �?${currentChallengeStage} 关完成`,
+      '[挑战模式] 关卡结算已冻结，等待进入下一�?,
     ]);
     setIsProcessing(false);
     setSettlementSubPhase(null);
     setClashResult(null);
-    setLogs(prev => [...prev, '[系统] 当前战斗流程已冻结']);
+    setLogs(prev => [...prev, '[系统] 当前战斗流程已冻�?]);
     return true;
   }, [clearPendingBattleTimers, clearTransientBattleVisuals, currentChallengeStage, gameMode, invalidateBattleSession]);
 
@@ -1238,7 +1238,7 @@ export default function App() {
     if (!challengeStageClear) return;
     const requiresFaithReward = challengeStageClear.completedStage <= 2;
     if (requiresFaithReward && selectedStageReward?.stage !== challengeStageClear.completedStage) {
-      showShortNotice('请先选择一项神明赐福');
+      showShortNotice('请先选择一项神明赐�?);
       return;
     }
     const requiresItemReward = isItemRewardStage(challengeStageClear.completedStage);
@@ -1262,7 +1262,7 @@ export default function App() {
       setState(failedState);
       setChallengeStageClear(null);
       setSelectedStageReward(null);
-      setLogs(prev => [...prev, '[挑战模式] 玩家生命值已归零，挑战失败']);
+      setLogs(prev => [...prev, '[挑战模式] 玩家生命值已归零，挑战失�?]);
       setIsProcessing(false);
       setSettlementSubPhase(null);
       setClashResult(null);
@@ -1313,7 +1313,7 @@ export default function App() {
       guestPlayed: [],
       winner: null,
       phase: snapshot.playerRole === 'HOME' ? 'PLAYER_ATTACK' : 'AI_ATTACK',
-      lastAction: `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关\n[对手] 当前生命：${nextAiHP} / ${nextAiHP}\n[对手] 新的对手已进入战场\n[对手] 初始抽取 ${AI_BASE_HAND_LIMIT} 张卡牌`,
+      lastAction: `[挑战模式] 进入�?${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关\n[对手] 当前生命�?{nextAiHP} / ${nextAiHP}\n[对手] 新的对手已进入战场\n[对手] 初始抽取 ${AI_BASE_HAND_LIMIT} 张卡牌`,
     };
 
     stateRef.current = nextState;
@@ -1339,17 +1339,17 @@ export default function App() {
     setGlacierEchoCandidates([]);
     continueAfterGlacierEchoRef.current = null;
     setChallengeStageNotice({ stage: nextStage, token: Date.now() });
-    setLogs(prev => [...prev, '[系统] 已清理上一关残留任务']);
+    setLogs(prev => [...prev, '[系统] 已清理上一关残留任�?]);
     setLogs(prev => [
       ...prev,
       `[公共牌库] 新关卡剩余卡牌数量：${nextDrawPile.length}`,
-      `[挑战模式] 进入第 ${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
-      `[对手] 当前生命：${nextAiHP} / ${nextAiHP}`,
-      `[对手] 当前 AI 类型：${getChallengeAiStageConfig(nextStage).name}`,
-      '[对手] 新的对手已进入战场',
+      `[挑战模式] 进入�?${nextStage} / ${CHALLENGE_STAGE_CONFIG.totalStages} 关`,
+      `[对手] 当前生命�?{nextAiHP} / ${nextAiHP}`,
+      `[对手] 当前 AI 类型�?{getChallengeAiStageConfig(nextStage).name}`,
+      '[对手] 新的对手已进入战�?,
       `[对手] 初始抽取 ${AI_BASE_HAND_LIMIT} 张卡牌`,
     ]);
-    showMutationPhaseNotice(`第 ${nextStage} 关：新的对手已进入战场`, 850);
+    showMutationPhaseNotice(`�?${nextStage} 关：新的对手已进入战场`, 850);
     scheduleSettlementTimer(() => {
       setChallengeStageNotice(null);
     }, 900);
@@ -1381,16 +1381,16 @@ export default function App() {
     claimedStageRewardStagesRef.current.add(completedStage);
     showShortNotice(
       levelAfter > levelBefore
-        ? `${deity.icon} ${deity.name}升级\nLv.${levelBefore} → Lv.${levelAfter}`
+        ? `${deity.icon} ${deity.name}升级\nLv.${levelBefore} �?Lv.${levelAfter}`
         : `${deity.icon} ${deity.name}信仰 +1`,
       900
     );
     setLogs(prev => [
       ...prev,
-      `[奖励] 第 ${completedStage} 关完成，获得神明赐福`,
-      `[信仰] ${deity.name}信仰：${faithBefore} → ${faithAfter}`,
+      `[奖励] �?${completedStage} 关完成，获得神明赐福`,
+      `[信仰] ${deity.name}信仰�?{faithBefore} �?${faithAfter}`,
       ...(levelAfter > levelBefore
-        ? [`[神明] ${deity.name}升级：Lv.${levelBefore} → Lv.${levelAfter}`]
+        ? [`[神明] ${deity.name}升级：Lv.${levelBefore} �?Lv.${levelAfter}`]
         : []),
     ]);
   };
@@ -1404,11 +1404,11 @@ export default function App() {
     if (!reward) return;
 
     if (rewardId === 'HAND_SLOT' && hasClaimedHandSlotReward) {
-      showShortNotice('本轮挑战已获得手牌扩容');
+      showShortNotice('本轮挑战已获得手牌扩�?);
       return;
     }
 
-    const rewardLogs = [`[奖励] 获得“${reward.name}”`];
+    const rewardLogs = [`[奖励] 获得�?{reward.name}”`];
 
     if (rewardId === 'HAND_SLOT') {
       const before = playerHandLimitRef.current;
@@ -1416,7 +1416,7 @@ export default function App() {
       playerHandLimitRef.current = after;
       setPlayerHandLimit(after);
       setHasClaimedHandSlotReward(true);
-      rewardLogs.push(`[成长] 玩家手牌槽位：${before} → ${after}`);
+      rewardLogs.push(`[成长] 玩家手牌槽位�?{before} �?${after}`);
     } else if (rewardId === 'MAX_HP') {
       const maxHpBefore = playerMaxHpRef.current;
       const maxHpAfter = maxHpBefore + CHALLENGE_REWARD_CONFIG.maxHpBonus;
@@ -1431,14 +1431,14 @@ export default function App() {
       stateRef.current = nextState;
       setState(nextState);
       setChallengeStageClear(prev => prev ? { ...prev, playerHP: hpAfter } : prev);
-      rewardLogs.push(`[成长] 玩家最大生命：${maxHpBefore} → ${maxHpAfter}`);
-      rewardLogs.push(`[恢复] 玩家生命：${hpBefore} → ${hpAfter}`);
+      rewardLogs.push(`[成长] 玩家最大生命：${maxHpBefore} �?${maxHpAfter}`);
+      rewardLogs.push(`[恢复] 玩家生命�?{hpBefore} �?${hpAfter}`);
     } else if (rewardId === 'SHIELD_CHARGE') {
       const shieldBefore = playerShieldRef.current;
       const shieldAfter = CHALLENGE_REWARD_CONFIG.shieldLimit;
       playerShieldRef.current = shieldAfter;
       setPlayerShield(shieldAfter);
-      rewardLogs.push(`[护盾] 玩家护盾：${shieldBefore} → ${shieldAfter}`);
+      rewardLogs.push(`[护盾] 玩家护盾�?{shieldBefore} �?${shieldAfter}`);
     }
 
     setSelectedStageItemReward({ stage: completedStage, rewardId });
@@ -1472,7 +1472,7 @@ export default function App() {
     setState(finalState);
     setLogs(prev => [
       ...prev,
-      `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+      `[挑战模式] �?${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
       '[挑战模式] 挑战通关',
     ]);
     setIsProcessing(false);
@@ -1507,14 +1507,14 @@ export default function App() {
     stateRef.current = nextState;
     setState(nextState);
     setChallengeStageClear(prev => prev ? { ...prev, playerHP: playerMaxHpRef.current } : prev);
-    setLogs(prev => [...prev, '[开发者] 玩家生命已补满']);
+    setLogs(prev => [...prev, '[开发者] 玩家生命已补�?]);
   };
 
   const devFillPlayerShield = () => {
     if (gameMode !== 'CHALLENGE') return;
     playerShieldRef.current = CHALLENGE_REWARD_CONFIG.shieldLimit;
     setPlayerShield(CHALLENGE_REWARD_CONFIG.shieldLimit);
-    setLogs(prev => [...prev, '[开发者] 玩家护盾已充满']);
+    setLogs(prev => [...prev, '[开发者] 玩家护盾已充�?]);
   };
 
   const devMaxSingleDeity = (deity: keyof FaithState, label: string) => {
@@ -1547,7 +1547,7 @@ export default function App() {
     if (completedStage <= 2) {
       if (selectedStageReward?.stage === completedStage || claimedStageRewardStagesRef.current.has(completedStage)) return;
       claimStageFaithReward(DEITY_ORDER[0]);
-      setLogs(prev => [...prev, '[开发者] 已自动领取当前奖励']);
+      setLogs(prev => [...prev, '[开发者] 已自动领取当前奖�?]);
       return;
     }
 
@@ -1556,7 +1556,7 @@ export default function App() {
       const reward = STAGE_ITEM_REWARDS.find(item => item.id !== 'HAND_SLOT' || !hasClaimedHandSlotReward);
       if (!reward) return;
       claimStageItemReward(reward.id);
-      setLogs(prev => [...prev, '[开发者] 已自动领取当前奖励']);
+      setLogs(prev => [...prev, '[开发者] 已自动领取当前奖�?]);
     }
   };
 
@@ -1571,7 +1571,7 @@ export default function App() {
         : prev.playerHand;
 
       if (playerCardId) {
-        logsToAppend.push(`[玩家] 获得“${
+        logsToAppend.push(`[玩家] 获得�?{
           selectedPlayerCard
             ? (activeMutationType === 'FOREST'
               ? `${forestCardLabel(selectedPlayerCard.type)}·幼苗`
@@ -1589,7 +1589,7 @@ export default function App() {
         if (selectedAiCard) {
           aiHand = aiHand.map(applyMutationToCard(selectedAiCard.id, activeMutationType, completedClashCountRef.current));
           logsToAppend.push('[环境事件] 对手获得 1 张异变牌');
-          logsToAppend.push(`[对手异变牌] 当前总数：${countAllMutatedCards(aiHand)} / ${mutationLimit}`);
+          logsToAppend.push(`[对手异变牌] 当前总数�?{countAllMutatedCards(aiHand)} / ${mutationLimit}`);
           playSoundEffect('mutation', isMuted);
           setMutationAnimation({ side: 'AI', token: Date.now() });
           setAiMutationCountPulse(true);
@@ -1762,14 +1762,14 @@ export default function App() {
         const after = Math.min(FROST_LORD_CONFIG.frostSigilLimit, before + 1);
         playerFrostSigilsRef.current = after;
         setPlayerFrostSigils(after);
-        resultLogs.push(`[霜君] 冰川牌平局回收，获得霜签：${before} → ${after}`);
+        resultLogs.push(`[霜君] 冰川牌平局回收，获得霜签：${before} �?${after}`);
       }
       if (card.glacierEchoUsed) {
-        resultLogs.push('[冰川回收] 该冰川牌已使用过“极寒回响”');
+        resultLogs.push('[冰川回收] 该冰川牌已使用过“极寒回响�?);
       }
     });
     if (aiGlacierReclaims.length > 0) {
-      resultLogs.push(`[冰川回收] 对手有 ${aiGlacierReclaims.length} 张冰川牌形成平局并返回手牌`);
+      resultLogs.push(`[冰川回收] 对手�?${aiGlacierReclaims.length} 张冰川牌形成平局并返回手牌`);
     }
     const guestVolcanoDamage = calculateVolcanoDamage({
       baseDamage: guestDamagingCards.length,
@@ -1917,10 +1917,10 @@ export default function App() {
       bossBonus = 0,
     ) => {
       if (totalDamage <= 0) return;
-      resultLogs.push(`[伤害] 基础伤害：${baseDamage}`);
+      resultLogs.push(`[伤害] 基础伤害�?{baseDamage}`);
       const volcanoLog = buildVolcanoDamageLog(damagingCards, volcanoBonus);
       if (volcanoLog) resultLogs.push(volcanoLog);
-      if (bossBonus > 0) resultLogs.push(`[Boss] 命运压迫额外伤害：+${bossBonus}`);
+      if (bossBonus > 0) resultLogs.push(`[Boss] 命运压迫额外伤害�?${bossBonus}`);
       if (resonanceBonus > 0) resultLogs.push(`[羁绊] 触发“灼烧共鸣”：+${VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage}`);
       resultLogs.push(`[结算] 最终伤害：${totalDamage}`);
       if (bossBonus > 0) {
@@ -1966,14 +1966,14 @@ export default function App() {
       }
     }
     if (playerForestRecovery > 0) {
-      resultLogs.push('[森林恢复] 成熟森林牌成功命中');
-      resultLogs.push(`[恢复] 玩家 HP：${playerHpAfterDamage} → ${resolvedPlayerHP}`);
-      resultLogs.push(`[恢复] 森林环境恢复：+${playerForestRecovery}`);
+      resultLogs.push('[森林恢复] 成熟森林牌成功命�?);
+      resultLogs.push(`[恢复] 玩家 HP�?{playerHpAfterDamage} �?${resolvedPlayerHP}`);
+      resultLogs.push(`[恢复] 森林环境恢复�?${playerForestRecovery}`);
     }
     if (aiForestRecovery > 0) {
-      resultLogs.push('[森林恢复] 对手通过森林异变牌恢复 HP');
-      resultLogs.push(`[恢复] 对手 HP：${aiHpAfterDamage} → ${resolvedAiHP}`);
-      resultLogs.push(`[恢复] 森林环境恢复：+${aiForestRecovery}`);
+      resultLogs.push('[森林恢复] 对手通过森林异变牌恢�?HP');
+      resultLogs.push(`[恢复] 对手 HP�?{aiHpAfterDamage} �?${resolvedAiHP}`);
+      resultLogs.push(`[恢复] 森林环境恢复�?${aiForestRecovery}`);
     }
     const playerSymbiosisTriggered = playerRoleAtClash === 'HOME'
       ? homeForestRecovery.symbiosisTriggered
@@ -1989,30 +1989,30 @@ export default function App() {
       && faithState.DEER_SPIRIT.level >= 2
       && playerSymbiosisTriggered;
     if (playerSymbiosisTriggered) {
-      resultLogs.push('[羁绊] 触发“共生绽放”');
+      resultLogs.push('[羁绊] 触发“共生绽放�?);
     }
     if (aiSymbiosisTriggered) {
-      resultLogs.push('[羁绊] 对手触发“共生绽放”');
+      resultLogs.push('[羁绊] 对手触发“共生绽放�?);
     }
     if (forestMutationCountdownReduction > 0) {
-      resultLogs.push('[环境事件] 下一次森林感染倒计时减少 1 轮');
+      resultLogs.push('[环境事件] 下一次森林感染倒计时减�?1 �?);
       pulseMutationEvent();
     }
     if (canGenerateDewdrops) {
-      resultLogs.push('[鹿灵] 触发“露华”');
+      resultLogs.push('[鹿灵] 触发“露华�?);
       if (dewdropsGained > 0) {
-        resultLogs.push(`[鹿灵] 溢出恢复转化为露珠：${dewdropsBeforeGain} → ${dewdropsAfterGain}`);
+        resultLogs.push(`[鹿灵] 溢出恢复转化为露珠：${dewdropsBeforeGain} �?${dewdropsAfterGain}`);
       }
       if (dewdropsGained < playerForestOverflowRecovery) {
-        resultLogs.push(`[鹿灵] 露珠已达上限：${DEER_SPIRIT_CONFIG.dewdropLimit} / ${DEER_SPIRIT_CONFIG.dewdropLimit}`);
+        resultLogs.push(`[鹿灵] 露珠已达上限�?{DEER_SPIRIT_CONFIG.dewdropLimit} / ${DEER_SPIRIT_CONFIG.dewdropLimit}`);
       }
     }
     if (dewdropHeal > 0) {
-      resultLogs.push(`[鹿灵] 自动消耗露珠：${dewdropsAfterGain} → ${dewdropsAfterAutoHeal}`);
-      resultLogs.push(`[恢复] 露珠恢复 ${dewdropHeal} 点生命：${resolvedPlayerHP} → ${settledPlayerHP}`);
+      resultLogs.push(`[鹿灵] 自动消耗露珠：${dewdropsAfterGain} �?${dewdropsAfterAutoHeal}`);
+      resultLogs.push(`[恢复] 露珠恢复 ${dewdropHeal} 点生命：${resolvedPlayerHP} �?${settledPlayerHP}`);
     }
     if (canTriggerSprout) {
-      resultLogs.push('[鹿灵] 触发“催芽”');
+      resultLogs.push('[鹿灵] 触发“催芽�?);
       resultLogs.push(
         sproutSeedlingCandidate
           ? '[森林成长] 1 张森林幼苗已立即成熟'
@@ -2035,15 +2035,15 @@ export default function App() {
       const baseScorchAfter = scorchAfter;
       const triggeredFuel = faithState.KITCHEN_GOD.level >= 2 && playerTriggeredVolcanoResonance;
       if (playerSuccessfulVolcanoHits > 0 && baseScorchAfter > scorchBefore) {
-        resultLogs.push(`[灶神] 火山异变牌命中，敌方灼痕：${scorchBefore} → ${baseScorchAfter}`);
+        resultLogs.push(`[灶神] 火山异变牌命中，敌方灼痕�?{scorchBefore} �?${baseScorchAfter}`);
       }
       if (triggeredFuel) {
         const fuelBefore = scorchAfter;
         const fuelAfter = Math.min(KITCHEN_GOD_CONFIG.scorchMarkLimit, fuelBefore + 1);
         scorchAfter = fuelAfter;
-        resultLogs.push('[灶神] 触发“添薪”');
-        resultLogs.push('[灶神] 灼烧共鸣额外增加 1 层灼痕');
-        resultLogs.push(`[灶神] 敌方灼痕：${fuelBefore} → ${fuelAfter}`);
+        resultLogs.push('[灶神] 触发“添薪�?);
+        resultLogs.push('[灶神] 灼烧共鸣额外增加 1 层灼�?);
+        resultLogs.push(`[灶神] 敌方灼痕�?{fuelBefore} �?${fuelAfter}`);
       }
       if (scorchAfter !== scorchBefore) {
         enemyScorchMarksRef.current = scorchAfter;
@@ -2273,8 +2273,8 @@ export default function App() {
             });
             setLogs(prevLogs => [
               ...prevLogs,
-              `[挑战模式] 第 ${currentChallengeStage} 关完成`,
-              '[系统] 当前战斗流程已冻结',
+              `[挑战模式] �?${currentChallengeStage} 关完成`,
+              '[系统] 当前战斗流程已冻�?,
             ]);
             return stageClearState;
           }
@@ -2315,9 +2315,9 @@ export default function App() {
             setBossPressure(pressureAfter);
             setLogs(prev => [
               ...prev,
-              `[Boss] 命运压迫 +1：${pressureBefore} → ${pressureAfter}`,
+              `[Boss] 命运压迫 +1�?{pressureBefore} �?${pressureAfter}`,
               ...(pressureAfter >= bossPressureThreshold
-                ? ['[Boss] 命运压迫已满，下一次 Boss 有效伤害 +1']
+                ? ['[Boss] 命运压迫已满，下一�?Boss 有效伤害 +1']
                 : []),
             ]);
           }
@@ -2332,7 +2332,7 @@ export default function App() {
           completedClashCount: nextCompletedClashCount,
         });
         const growthLogs = playerGrowth.maturedCards
-          .map(card => `[森林成长] “${forestCardLabel(card.type)}”已成熟`);
+          .map(card => `[森林成长] �?{forestCardLabel(card.type)}”已成熟`);
         const maturedIds = [...playerGrowth.maturedCards, ...aiGrowth.maturedCards].map(card => card.id);
         if (growthLogs.length > 0) {
           setLogs(logPrev => [...logPrev, ...growthLogs]);
@@ -2367,7 +2367,7 @@ export default function App() {
         setLogs(prev => [
           ...prev,
           currentModeConfig.environmentMode === 'ROTATION'
-            ? `[环境路线] ${activeMutationLabel}阶段剩余：${nextEnvironmentRoundsRemaining} 轮`
+            ? `[环境路线] ${activeMutationLabel}阶段剩余�?{nextEnvironmentRoundsRemaining} 轮`
             : `[环境事件] ${activeMutationLabel}环境持续中`,
         ]);
 
@@ -2377,7 +2377,7 @@ export default function App() {
         );
 
         if (latest.drawPile.length <= 0) {
-          setLogs(prev => [...prev, '[环境事件] 公共牌库已耗尽，感染阶段关闭']);
+          setLogs(prev => [...prev, '[环境事件] 公共牌库已耗尽，感染阶段关�?]);
           scheduleSettlementTimer(finishTurn, 350);
           return;
         }
@@ -2459,7 +2459,7 @@ export default function App() {
             addAnimation('DRAW_PLAYER', 110, 620, 420 + (current.playerHand.length + cardIndex) * 60, 648, card.type);
           }, cardIndex * 100);
         });
-        triggerDeckFeedback(`我方补牌 +${drawCount}`, zhCN.logs.playerDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
+        triggerDeckFeedback(`我方补牌 +${drawCount}`, zhCN.logs.playerDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} �?${afterDeckCount}`);
         setLogs(logPrev => [
           ...logPrev,
           zhCN.logs.playerDraw(drawCount),
@@ -2478,7 +2478,7 @@ export default function App() {
             addAnimation('DRAW_AI', 110, 620, 880 + (current.aiHand.length + cardIndex) * 40, 60, undefined);
           }, cardIndex * 100);
         });
-        triggerDeckFeedback(`对手补牌 +${drawCount}`, zhCN.logs.aiDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} → ${afterDeckCount}`);
+        triggerDeckFeedback(`对手补牌 +${drawCount}`, zhCN.logs.aiDraw(drawCount), `-${drawCount}`, `${beforeDeckCount} �?${afterDeckCount}`);
         setLogs(logPrev => [
           ...logPrev,
           zhCN.logs.aiDraw(drawCount),
@@ -2574,7 +2574,7 @@ export default function App() {
         if (gameMode === 'CHALLENGE' && resolvedAiHP <= 0 && settledPlayerHP > 0) {
           setLogs(prev => [
             ...prev,
-            `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+            `[挑战模式] �?${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
             '[挑战模式] 挑战通关',
           ]);
         }
@@ -2672,15 +2672,15 @@ export default function App() {
 
         if (selectedEchoCardId) {
           const selectedCard = playerEchoCandidates.find(card => card.id === selectedEchoCardId);
-          echoLogs.push(`[冰川回收] “${selectedCard ? glacierCardLabel(selectedCard.type) : '冰川牌'}”保留异变属性`);
-          echoLogs.push(`[冰川回收] “${selectedCard ? glacierCardLabel(selectedCard.type) : '冰川牌'}”已使用极寒回响次数：1 / 1`);
+          echoLogs.push(`[冰川回收] �?{selectedCard ? glacierCardLabel(selectedCard.type) : '冰川�?}”保留异变属性`);
+          echoLogs.push(`[冰川回收] �?{selectedCard ? glacierCardLabel(selectedCard.type) : '冰川�?}”已使用极寒回响次数�? / 1`);
           if (gameMode === 'CHALLENGE' && faithState.FROST_LORD.level >= 2) {
             const before = playerFrostSigilsRef.current;
             const after = Math.min(FROST_LORD_CONFIG.frostSigilLimit, before + 1);
             playerFrostSigilsRef.current = after;
             setPlayerFrostSigils(after);
-            echoLogs.push('[霜君] 触发“连雪”');
-            echoLogs.push(`[霜君] 极寒回响额外获得霜签：${before} → ${after}`);
+            echoLogs.push('[霜君] 触发“连雪�?);
+            echoLogs.push(`[霜君] 极寒回响额外获得霜签�?{before} �?${after}`);
           }
         }
 
@@ -2691,9 +2691,9 @@ export default function App() {
           });
 
         if (aiEchoTriggered) {
-          echoLogs.push('[羁绊] 对手触发“极寒回响”');
+          echoLogs.push('[羁绊] 对手触发“极寒回响�?);
           if (selectedAiEchoCardId) {
-            echoLogs.push('[冰川回收] 对手有 1 张冰川牌保留异变属性');
+            echoLogs.push('[冰川回收] 对手�?1 张冰川牌保留异变属�?);
           }
         }
 
@@ -2740,8 +2740,8 @@ export default function App() {
       if (playerEchoTriggered) {
         setLogs(prev => [
           ...prev,
-          '[羁绊] 触发“极寒回响”',
-          '[冰川回收] 请选择 1 张冰川牌保留异变属性',
+          '[羁绊] 触发“极寒回响�?,
+          '[冰川回收] 请选择 1 张冰川牌保留异变属�?,
         ]);
         setGlacierEchoCandidates(playerEchoCandidates);
         continueAfterGlacierEchoRef.current = applyGlacierReturnAndDiscard;
@@ -2807,9 +2807,9 @@ export default function App() {
               `[公共牌库] 回收对手弃牌区：${prev.aiDiscardPile.length + 1} 张`,
               `[公共牌库] 回收奉纳区：${prev.playerOfferingPile.length} 张`,
               ...(prev.playerOfferingPile.length > 0 ? ['[公共牌库] 奉纳异变牌已恢复为普通牌'] : []),
-              `[公共牌库] 异变牌恢复为普通牌：${recycle.normalizedMutationCount} 张`,
-              '[公共牌库] 已重新洗牌',
-              `[公共牌库] 当前剩余：${tempDraw.length} 张`,
+              `[公共牌库] 异变牌恢复为普通牌�?{recycle.normalizedMutationCount} 张`,
+              '[公共牌库] 已重新洗�?,
+              `[公共牌库] 当前剩余�?{tempDraw.length} 张`,
             ]);
           }
 
@@ -2842,7 +2842,7 @@ export default function App() {
           }
 
           nextPhase = 'PLAYER_DEFEND';
-          nextAction = `${zhCN.logs.aiDeployed(played.length)}\n[系统] 请准备防守${aiRerolledText}`;
+          nextAction = `${zhCN.logs.aiDeployed(played.length)}\n[系统] 请准备防�?{aiRerolledText}`;
           
           return {
             ...prev,
@@ -2950,7 +2950,7 @@ export default function App() {
   const onStartRerollMode = () => {
     if (isProcessing || state.winner) return;
     if (playerHasRerolledThisTurn) {
-      showShortNotice("每回合最多只能主动弃牌一次");
+      showShortNotice("每回合最多只能主动弃牌一�?);
       return;
     }
     setSelectedCards([]);
@@ -2965,7 +2965,7 @@ export default function App() {
 
   const onConfirmReroll = () => {
     if (!rerollSelectedCardId) {
-      showShortNotice("请选择 1 张卡牌进行弃牌");
+      showShortNotice("请选择 1 张卡牌进行弃�?);
       return;
     }
     
@@ -3060,7 +3060,7 @@ export default function App() {
       return;
     }
     if (state.phase === 'PLAYER_ATTACK' && state.playerHand.length <= 1) {
-      showShortNotice('至少需要保留 1 张手牌用于出牌');
+      showShortNotice('至少需要保�?1 张手牌用于出�?);
       return;
     }
     setOfferingPickerCardId(selectedCard.id);
@@ -3077,7 +3077,7 @@ export default function App() {
       return;
     }
     if (stateRef.current.phase === 'PLAYER_ATTACK' && stateRef.current.playerHand.length <= 1) {
-      showShortNotice('至少需要保留 1 张手牌用于出牌');
+      showShortNotice('至少需要保�?1 张手牌用于出�?);
       setOfferingPickerCardId(null);
       return;
     }
@@ -3114,16 +3114,16 @@ export default function App() {
     setOfferingPickerCardId(null);
     showShortNotice(
       levelAfter > levelBefore
-        ? `${deity.icon} ${deity.name}升级\nLv.${levelBefore} → Lv.${levelAfter}`
+        ? `${deity.icon} ${deity.name}升级\nLv.${levelBefore} �?Lv.${levelAfter}`
         : `异变牌已奉纳\n${deity.name}信仰 +${gain}`,
       900
     );
     setLogs(prev => [
       ...prev,
-      `[奉纳] 玩家将“${cardName}”奉纳给${deity.name}`,
-      `[信仰] ${deity.name}信仰：${faithBefore} → ${faithAfter}`,
+      `[奉纳] 玩家将�?{cardName}”奉纳给${deity.name}`,
+      `[信仰] ${deity.name}信仰�?{faithBefore} �?${faithAfter}`,
       ...(levelAfter > levelBefore
-        ? [`[神明] ${deity.name}升级：Lv.${levelBefore} → Lv.${levelAfter}`]
+        ? [`[神明] ${deity.name}升级：Lv.${levelBefore} �?Lv.${levelAfter}`]
         : []),
     ]);
   };
@@ -3131,16 +3131,16 @@ export default function App() {
   const releaseCombustion = () => {
     if (gameMode !== 'CHALLENGE' || faithState.KITCHEN_GOD.level < 1) return;
     if (!isPlayerTurnState || isProcessing || state.winner || challengeStageClear) {
-      showShortNotice('当前阶段不能释放神明技能');
+      showShortNotice('当前阶段不能释放神明技�?);
       return;
     }
     if (hasUsedDeitySkillThisClash) {
-      showShortNotice('本轮已经释放神明技能');
+      showShortNotice('本轮已经释放神明技�?);
       return;
     }
     const scorchBefore = enemyScorchMarksRef.current;
     if (scorchBefore < KITCHEN_GOD_CONFIG.combustionMinimumMarks) {
-      showShortNotice(`至少需要 ${KITCHEN_GOD_CONFIG.combustionMinimumMarks} 层灼痕`);
+      showShortNotice(`至少需�?${KITCHEN_GOD_CONFIG.combustionMinimumMarks} 层灼痕`);
       return;
     }
 
@@ -3171,20 +3171,20 @@ export default function App() {
     setState(nextState);
     setLogs(prev => [
       ...prev,
-      '[灶神] 释放“爆燃”',
+      '[灶神] 释放“爆燃�?,
       `[神明伤害] 基础爆燃造成 ${baseDamage} 点伤害`,
       ...(coreDamage > 0
         ? [
-            '[灶神] 触发“炉心爆燃”',
+            '[灶神] 触发“炉心爆燃�?,
             `[神明伤害] 炉心爆燃追加 ${coreDamage} 点伤害`,
           ]
         : []),
-      `[灶神] 消耗灼痕：${scorchBefore} → ${retainedScorchMarks}`,
+      `[灶神] 消耗灼痕：${scorchBefore} �?${retainedScorchMarks}`,
       ...(retainedScorchMarks > 0
         ? [
-            '[灶神] 触发“余火”',
-            '[灶神] 爆燃后保留 1 层灼痕',
-            `[灶神] 敌方灼痕：${scorchBefore} → 1`,
+            '[灶神] 触发“余火�?,
+            '[灶神] 爆燃后保�?1 层灼�?,
+            `[灶神] 敌方灼痕�?{scorchBefore} �?1`,
           ]
         : []),
     ]);
@@ -3231,7 +3231,7 @@ export default function App() {
         });
         setLogs(prev => [
           ...prev,
-          `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+          `[挑战模式] �?${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
           '[挑战模式] 挑战通关',
         ]);
         setIsProcessing(false);
@@ -3247,11 +3247,11 @@ export default function App() {
   const releaseAntlerCharge = (hpCost: number) => {
     if (gameMode !== 'CHALLENGE' || faithState.DEER_SPIRIT.level < 3) return;
     if (!isPlayerTurnState || isProcessing || state.winner || challengeStageClear) {
-      showShortNotice('当前阶段不能释放神明技能');
+      showShortNotice('当前阶段不能释放神明技�?);
       return;
     }
     if (hasUsedDeitySkillThisClash) {
-      showShortNotice('本轮已经释放神明技能');
+      showShortNotice('本轮已经释放神明技�?);
       return;
     }
 
@@ -3266,7 +3266,7 @@ export default function App() {
       Math.max(0, snapshot.playerHP - safeHpLine)
     );
     if (hpCost < 1 || hpCost > maxAllowedCost) {
-      showShortNotice(maxAllowedCost <= 0 ? '当前生命不足以发动鹿角奔袭' : '请选择可承受的生命消耗');
+      showShortNotice(maxAllowedCost <= 0 ? '当前生命不足以发动鹿角奔�? : '请选择可承受的生命消�?);
       return;
     }
 
@@ -3293,9 +3293,9 @@ export default function App() {
     setAiHPFlash(true);
     setLogs(prev => [
       ...prev,
-      '[鹿灵] 释放“鹿角奔袭”',
-      ...(isVerdantSurge ? ['[鹿灵] 触发“万木奔涌”'] : []),
-      `[生命转化] 玩家消耗 ${hpCost} 点生命：${snapshot.playerHP} → ${nextPlayerHP}`,
+      '[鹿灵] 释放“鹿角奔袭�?,
+      ...(isVerdantSurge ? ['[鹿灵] 触发“万木奔涌�?] : []),
+      `[生命转化] 玩家消�?${hpCost} 点生命：${snapshot.playerHP} �?${nextPlayerHP}`,
       `[神明伤害] ${isVerdantSurge ? '万木奔涌' : '鹿角奔袭'}造成 ${damage} 点伤害`,
     ]);
 
@@ -3338,7 +3338,7 @@ export default function App() {
         });
         setLogs(prev => [
           ...prev,
-          `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+          `[挑战模式] �?${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
           '[挑战模式] 挑战通关',
         ]);
         setIsProcessing(false);
@@ -3351,16 +3351,16 @@ export default function App() {
   const releaseFrostSigils = (sigilsToRelease: number) => {
     if (gameMode !== 'CHALLENGE' || faithState.FROST_LORD.level < 1) return;
     if (!isPlayerTurnState || isProcessing || state.winner || challengeStageClear) {
-      showShortNotice('当前阶段不能释放神明技能');
+      showShortNotice('当前阶段不能释放神明技�?);
       return;
     }
     if (hasUsedDeitySkillThisClash) {
-      showShortNotice('本轮已经释放神明技能');
+      showShortNotice('本轮已经释放神明技�?);
       return;
     }
     const availableSigils = playerFrostSigilsRef.current;
     if (sigilsToRelease < 1 || sigilsToRelease > availableSigils) {
-      showShortNotice('请选择当前拥有的霜签数量');
+      showShortNotice('请选择当前拥有的霜签数�?);
       return;
     }
 
@@ -3398,10 +3398,10 @@ export default function App() {
       ...prev,
       `[霜君] 释放 ${sigilsToRelease} 枚霜签`,
       ...(triggersColdWave
-        ? ['[霜君] 触发“寒潮”', '[神明伤害] 追加 1 枚临时霜签']
+        ? ['[霜君] 触发“寒潮�?, '[神明伤害] 追加 1 枚临时霜�?]
         : []),
       ...(triggersBlizzard
-        ? ['[霜君] 触发“暴雪”', '[神明伤害] 追加 2 枚临时霜签']
+        ? ['[霜君] 触发“暴雪�?, '[神明伤害] 追加 2 枚临时霜�?]
         : []),
       `[神明伤害] 霜签连续造成 ${totalHits} 点伤害`,
     ]);
@@ -3446,7 +3446,7 @@ export default function App() {
         });
         setLogs(prev => [
           ...prev,
-          `[挑战模式] 第 ${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
+          `[挑战模式] �?${CHALLENGE_STAGE_CONFIG.totalStages} 关完成`,
           '[挑战模式] 挑战通关',
         ]);
         setIsProcessing(false);
@@ -3466,13 +3466,13 @@ export default function App() {
     
     if (state.phase === 'PLAYER_ATTACK') {
       if (selected.length === 0 || selected.length > 3) {
-        showShortNotice("主场连击必须使用 1~3 张卡牌");
+        showShortNotice("主场连击必须使用 1~3 张卡�?);
         return;
       }
       const firstType = selected[0].type;
       const allSame = selected.every(c => c.type === firstType);
       if (!allSame) {
-        showShortNotice("主场连击必须使用相同属性卡牌");
+        showShortNotice("主场连击必须使用相同属性卡�?);
         return;
       }
 
@@ -3542,7 +3542,7 @@ export default function App() {
       if (selectedCards.length > 0) {
         const firstCard = state.playerHand.find(c => c.id === selectedCards[0])!;
         if (firstCard.type !== card.type) {
-          showShortNotice("主场连击必须使用相同属性卡牌");
+          showShortNotice("主场连击必须使用相同属性卡�?);
           return;
         }
       }
@@ -3594,9 +3594,9 @@ export default function App() {
     && isPlayerTurnState
     && !isRerollMode;
   const combustionDisabledReason = hasUsedDeitySkillThisClash
-    ? '本轮已经释放神明技能'
+    ? '本轮已经释放神明技�?
     : enemyScorchMarks < KITCHEN_GOD_CONFIG.combustionMinimumMarks
-      ? `至少需要 ${KITCHEN_GOD_CONFIG.combustionMinimumMarks} 层灼痕`
+      ? `至少需�?${KITCHEN_GOD_CONFIG.combustionMinimumMarks} 层灼痕`
       : null;
   const canUseVerdantSurge = gameMode === 'CHALLENGE'
     && faithState.DEER_SPIRIT.level >= 4
@@ -3618,9 +3618,9 @@ export default function App() {
     && isPlayerTurnState
     && !isRerollMode;
   const antlerChargeDisabledReason = hasUsedDeitySkillThisClash
-    ? '本轮已经释放神明技能'
+    ? '本轮已经释放神明技�?
     : maxAntlerChargeHpCost <= 0
-      ? '当前生命不足以发动鹿角奔袭'
+      ? '当前生命不足以发动鹿角奔�?
       : null;
   useEffect(() => {
     if (!canShowAntlerChargeAction || antlerChargeDisabledReason) {
@@ -3632,7 +3632,7 @@ export default function App() {
     && isPlayerTurnState
     && !isRerollMode;
   const frostSigilDisabledReason = hasUsedDeitySkillThisClash
-    ? '本轮已经释放神明技能'
+    ? '本轮已经释放神明技�?
     : playerFrostSigils <= 0
       ? '当前没有霜签'
       : null;
@@ -3654,11 +3654,11 @@ export default function App() {
     && state.drawPile.length > 0;
   const isMutationProcessing = mutationCandidates.length > 0 || mutationAnimation !== null;
   const mutationEventStatus = state.drawPile.length === 0
-    ? '感染已停止'
+    ? '感染已停�?
     : isMutationProcessing
-      ? '感染处理中'
+      ? '感染处理�?
       : isMutationImminent
-      ? '本轮结束后触发感染'
+      ? '本轮结束后触发感�?
       : `下一次感染：${mutationRoundsRemaining} 轮后`;
 
   useEffect(() => {
@@ -3692,7 +3692,7 @@ export default function App() {
 
   const getPhaseIndicator = () => {
     let titleEng = zhCN.phases.idle;
-    let titleChn = "等待下一步操作";
+    let titleChn = "等待下一步操�?;
     let type: 'green' | 'amber' | 'blue' | 'gray' | 'red' = 'gray';
     let pulse = false;
     let bounce = false;
@@ -3705,7 +3705,7 @@ export default function App() {
     }
     else if (state.drawPile.length === 0 && showDepletedNotification) {
       titleEng = zhCN.phases.deckDepleted;
-      titleChn = "公共牌库已耗尽，进入最终交锋";
+      titleChn = "公共牌库已耗尽，进入最终交�?;
       type = 'red';
       pulse = true;
     }
@@ -3717,7 +3717,7 @@ export default function App() {
     }
     else if (state.playerRole === 'HOME' && state.phase === 'PLAYER_ATTACK') {
       titleEng = zhCN.phases.playerHomeTurn;
-      titleChn = "玩家主场：请选择 1~3 张相同类型卡牌进攻";
+      titleChn = "玩家主场：请选择 1~3 张相同类型卡牌进�?;
       type = 'green';
     } 
     else if (state.playerRole === 'HOME' && state.phase === 'AI_DEFEND') {
@@ -3744,7 +3744,7 @@ export default function App() {
     }
     else if (state.phase === 'RESOLVE' && settlementSubPhase === 'move-to-discard') {
       titleEng = zhCN.phases.discardPhase;
-      titleChn = "卡牌进入弃牌区";
+      titleChn = "卡牌进入弃牌�?;
       type = 'blue';
     }
     else if (state.phase === 'RESOLVE' && settlementSubPhase === 'replenishing') {
@@ -3764,7 +3764,7 @@ export default function App() {
     }
     else if (state.phase === 'AI_ATTACK') {
       titleEng = zhCN.phases.aiHomeTurn;
-      titleChn = "对手正在选择攻击牌...";
+      titleChn = "对手正在选择攻击�?..";
       type = 'amber';
       pulse = true;
       bounce = true;
@@ -3824,7 +3824,7 @@ export default function App() {
           >
             {/* Rock Card */}
             <div className="absolute w-[100px] h-[140px] rounded-xl bg-[#141417] border border-rock/20 flex flex-col items-center justify-center shadow-lg -translate-x-[75px] rotate-[-10deg] transition-all">
-              <div className="text-4xl mb-2 text-rock select-none">✊</div>
+              <div className="text-4xl mb-2 text-rock select-none">�?/div>
               <span className="text-[10px] font-mono font-black tracking-widest text-[#3b82f6]/70">{zhCN.cards.ROCK}</span>
               <span className="text-[8px] font-mono text-text-dim/30 mt-1">战术单元 01</span>
             </div>
@@ -3838,7 +3838,7 @@ export default function App() {
 
             {/* Paper Card */}
             <div className="absolute w-[100px] h-[140px] rounded-xl bg-[#141417] border border-paper/20 flex flex-col items-center justify-center shadow-lg translate-x-[75px] rotate-[10deg] transition-all">
-              <div className="text-4xl mb-2 text-paper select-none">✋</div>
+              <div className="text-4xl mb-2 text-paper select-none">�?/div>
               <span className="text-[10px] font-mono font-black tracking-widest text-[#10b981]/70">{zhCN.cards.PAPER}</span>
               <span className="text-[8px] font-mono text-text-dim/30 mt-1">战术单元 02</span>
             </div>
@@ -3876,7 +3876,7 @@ export default function App() {
                 </h3>
                 <p className="text-[11px] font-medium text-text-dim/80 mt-1 mb-5 leading-normal">
                   {zhCN.home.quickMatch}
-                  <span className="block text-[10px] text-text-dim/50 mt-1">单一火山环境，适合快速体验基础异变牌玩法</span>
+                  <span className="block text-[10px] text-text-dim/50 mt-1">单一火山环境，适合快速体验基础异变牌玩�?/span>
                 </p>
               </div>
 
@@ -3970,7 +3970,7 @@ export default function App() {
                 </h3>
                 <p className="text-[11px] font-medium text-text-dim/70 mt-1 mb-5 leading-normal">
                   {zhCN.home.challenge}
-                  <span className="block text-[10px] text-fuchsia-300/55 mt-1">火山、森林与冰川循环轮替，适合体验多环境构筑</span>
+                  <span className="block text-[10px] text-fuchsia-300/55 mt-1">火山、森林与冰川循环轮替，适合体验多环境构�?/span>
                 </p>
               </div>
 
@@ -3983,8 +3983,7 @@ export default function App() {
                     }}
                     className="py-2.5 rounded-lg text-[11px] font-black tracking-widest uppercase transition-all duration-300 cursor-pointer bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-fuchsia-500/15"
                   >
-                    重新开始
-                  </button>
+                    重新开�?                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -4003,8 +4002,7 @@ export default function App() {
                   }}
                   className="w-full py-2.5 rounded-lg text-xs font-black tracking-widest uppercase transition-all duration-300 cursor-pointer bg-fuchsia-300 text-black hover:opacity-90 active:scale-[0.98] shadow-lg shadow-fuchsia-500/15"
                 >
-                  开始作战
-                </button>
+                  开始作�?                </button>
               )}
             </div>
           </div>
@@ -4021,8 +4019,8 @@ export default function App() {
               </div>
               <div className="flex flex-col gap-0.5 pt-1">
                 {homeLogs.map((log, index) => {
-                  const isWarn = log.includes('尚未开放');
-                  const isInit = log.includes('初始化');
+                  const isWarn = log.includes('尚未开�?);
+                  const isInit = log.includes('初始�?);
                   const isSel = log.includes('已选择') || log.includes('准备');
                   
                   let textColor = 'text-text-dim/70';
@@ -4082,7 +4080,7 @@ export default function App() {
           </div>
           {gameMode === 'CHALLENGE' && (
             <div className="mt-1 flex justify-between text-[9px] font-mono font-bold text-white/48">
-              <span>{`护盾：${playerShield} / ${CHALLENGE_REWARD_CONFIG.shieldLimit}`}</span>
+              <span>{`护盾�?{playerShield} / ${CHALLENGE_REWARD_CONFIG.shieldLimit}`}</span>
               <span>{`手牌槽：${playerHandLimit}`}</span>
             </div>
           )}
@@ -4119,8 +4117,8 @@ export default function App() {
                 {forestRecoveryFeedback.symbiosisByTarget.PLAYER && (
                   <div className="mt-1 text-[9px] leading-tight text-emerald-100/80">
                     <div>🌿 共生绽放</div>
-                    <div>森林恢复：+2 HP</div>
-                    <div>下一次感染提前 1 轮</div>
+                    <div>森林恢复�?2 HP</div>
+                    <div>下一次感染提�?1 �?/div>
                   </div>
                 )}
               </motion.div>
@@ -4133,7 +4131,7 @@ export default function App() {
           <div className="text-[11px] text-accent font-bold tracking-widest">战斗引擎 V1.0</div>
           {screen === 'BATTLE' && gameMode === 'CHALLENGE' && (
             <div className="mt-1 text-[10px] font-mono font-black tracking-widest text-fuchsia-200/80">
-              挑战模式 · 第 {currentChallengeStage} / {CHALLENGE_STAGE_CONFIG.totalStages} 关
+              挑战模式 · �?{currentChallengeStage} / {CHALLENGE_STAGE_CONFIG.totalStages} �?
             </div>
           )}
           {isBossPressureActive && bossPressureThreshold > 0 && (
@@ -4171,7 +4169,7 @@ export default function App() {
                 <div className="mt-1 border-t border-orange-300/15 pt-1 text-[8px] font-black tracking-widest text-orange-100/55">
                   <div>🔥 炉心爆燃</div>
                   <div className={hasTriggeredCoreCombustionThisEnemy ? 'text-orange-100/45' : 'text-amber-200/85'}>
-                    {hasTriggeredCoreCombustionThisEnemy ? '本关已触发' : '就绪'}
+                    {hasTriggeredCoreCombustionThisEnemy ? '本关已触�? : '就绪'}
                   </div>
                 </div>
               )}
@@ -4210,7 +4208,7 @@ export default function App() {
                   <div className="mt-1 text-[10px] font-bold text-orange-100/75">灼痕额外 +1</div>
                 )}
                 {scorchFeedback.type === 'ember' && (
-                  <div className="mt-1 text-[10px] font-bold text-orange-100/75">保留 1 层灼痕</div>
+                  <div className="mt-1 text-[10px] font-bold text-orange-100/75">保留 1 层灼�?/div>
                 )}
                 {scorchFeedback.type === 'combustion' && (
                   <div className="mt-1 text-[10px] font-bold text-orange-100/75">额外伤害：{scorchFeedback.damage}</div>
@@ -4241,8 +4239,8 @@ export default function App() {
                 {forestRecoveryFeedback.symbiosisByTarget.AI && (
                   <div className="mt-1 text-[9px] leading-tight text-emerald-100/80">
                     <div>🌿 共生绽放</div>
-                    <div>森林恢复：+2 HP</div>
-                    <div>下一次感染提前 1 轮</div>
+                    <div>森林恢复�?2 HP</div>
+                    <div>下一次感染提�?1 �?/div>
                   </div>
                 )}
               </motion.div>
@@ -4314,8 +4312,7 @@ export default function App() {
           onClick={() => setIsExitLobbyDialogOpen(true)}
           className="rounded-md border border-white/10 bg-black/58 px-3 py-1.5 text-[10px] font-black tracking-widest text-text-main/80 shadow-[0_0_14px_rgba(0,0,0,0.18)] transition-all hover:border-accent/45 hover:text-accent hover:bg-black/72 active:scale-95"
         >
-          退出大厅
-        </button>
+          退出大�?        </button>
       </div>
 
       {/* Main Arena */}
@@ -4351,7 +4348,7 @@ export default function App() {
                 className="absolute top-[65px] right-0 bg-[#7f1d1d]/95 border border-red-500/30 rounded px-2.5 py-1.5 flex flex-col items-center select-none pointer-events-none font-mono text-red-400 font-bold leading-tight z-[25] min-w-[125px] text-center shadow-lg"
               >
                 <span className="text-[9px] tracking-wider font-extrabold">{aiDiscardPrompt}</span>
-                <span className="text-[8px] opacity-75 mt-0.5 font-bold">敌方弃牌区更新</span>
+                <span className="text-[8px] opacity-75 mt-0.5 font-bold">敌方弃牌区更�?/span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -4387,7 +4384,7 @@ export default function App() {
               <div className="absolute w-[42px] h-[56px] bg-[#1a1a22] border border-[#ef4444]/25 rounded flex items-center justify-center shadow-md overflow-hidden">
                 <UiAssetIcon src={ART_ASSETS.ui.discardPile} alt={zhCN.resources.aiDiscard} className="absolute inset-1 h-[calc(100%-0.5rem)] w-[calc(100%-0.5rem)] opacity-90" />
                 <div className="relative z-10 flex flex-col items-center justify-center font-mono text-[9px] text-[#ef4444]/80">
-                  <span className="text-sm leading-none">▼</span>
+                  <span className="text-sm leading-none">�?/span>
                 </div>
               </div>
             </div>
@@ -4405,7 +4402,7 @@ export default function App() {
             >
               <div className="text-[11px] font-black tracking-[0.24em] text-fuchsia-200/70 mb-2">挑战模式</div>
               <h2 className="text-4xl font-black tracking-widest text-accent mb-6">
-                第 {challengeStageClear.completedStage} 关完成
+                �?{challengeStageClear.completedStage} 关完�?
               </h2>
               <div className="w-[420px] rounded-xl border border-fuchsia-400/25 bg-[#100b14]/92 px-6 py-5 text-left shadow-[0_0_28px_rgba(217,70,239,0.10)]">
                 <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
@@ -4413,25 +4410,25 @@ export default function App() {
                   <span className="font-black text-white">{challengeStageClear.playerHP} / {playerMaxHp}</span>
                 </div>
                 <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
-                  <span className="text-text-dim">护盾 / 手牌槽</span>
+                  <span className="text-text-dim">护盾 / 手牌�?/span>
                   <span className="font-black text-white">{playerShield} / {CHALLENGE_REWARD_CONFIG.shieldLimit} · {playerHandLimit}</span>
                 </div>
                 <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
                   <span className="text-text-dim">保留手牌</span>
-                  <span className="font-black text-white">{challengeStageClear.retainedHandCount} 张</span>
+                  <span className="font-black text-white">{challengeStageClear.retainedHandCount} �?/span>
                 </div>
                 <div className="flex justify-between border-b border-white/[0.06] pb-2 mb-2">
-                  <span className="text-text-dim">当前异变牌</span>
-                  <span className="font-black text-white">{challengeStageClear.mutatedCardCount} 张</span>
+                  <span className="text-text-dim">当前异变�?/span>
+                  <span className="font-black text-white">{challengeStageClear.mutatedCardCount} �?/span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-text-dim">下一关</span>
-                  <span className="font-black text-fuchsia-200">第 {challengeStageClear.nextStage} 关</span>
+                  <span className="text-text-dim">下一�?/span>
+                  <span className="font-black text-fuchsia-200">�?{challengeStageClear.nextStage} �?/span>
                 </div>
                 {challengeStageClear.completedStage <= 2 && (
                   <div className="mt-4 border-t border-fuchsia-300/12 pt-4">
                     <div className="text-center text-[10px] font-black tracking-widest text-fuchsia-100/75">
-                      选择一项神明赐福
+                      选择一项神明赐�?
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2">
                       {DEITY_ORDER.map(deityType => {
@@ -4479,7 +4476,7 @@ export default function App() {
                         const isSelected = isClaimed && selectedStageItemReward?.rewardId === reward.id;
                         const disabled = isClaimed || (reward.id === 'HAND_SLOT' && hasClaimedHandSlotReward);
                         const hint = reward.id === 'HAND_SLOT' && hasClaimedHandSlotReward
-                          ? '本轮挑战已获得手牌扩容'
+                          ? '本轮挑战已获得手牌扩�?
                           : reward.id === 'SHIELD_CHARGE' && playerShield >= CHALLENGE_REWARD_CONFIG.shieldLimit
                             ? '当前护盾已满'
                             : undefined;
@@ -4528,7 +4525,7 @@ export default function App() {
                   }
                 `}
               >
-                进入下一关
+                进入下一�?
               </button>
             </motion.div>
           ) : state.winner ? (
@@ -4583,16 +4580,16 @@ export default function App() {
                         <div className="text-[12px] font-black tracking-widest text-white/90">
                           <span aria-hidden="true">{activeEnvironmentConfig.icon}</span> {environmentLabel(activeEnvironmentType)}
                         </div>
-                        <div className="mt-0.5 text-[8px] font-bold text-white/52">当前环境 · 剩余 {environmentRoundsRemaining} 轮</div>
+                        <div className="mt-0.5 text-[8px] font-bold text-white/52">当前环境 · 剩余 {environmentRoundsRemaining} �?/div>
                       </div>
-                      <div className="text-[13px] font-black text-white/35">→</div>
+                      <div className="text-[13px] font-black text-white/35">�?/div>
                       <div className="min-w-[70px] text-left">
                         <div className="text-[10px] font-black tracking-widest text-white/62">
                           <span aria-hidden="true">{nextEnvironmentConfig.icon}</span> {environmentLabel(nextEnvironmentType)}
                         </div>
                         <div className="mt-0.5 text-[8px] font-bold text-white/38">下一环境</div>
                       </div>
-                      <div className="text-[13px] font-black text-white/26">→</div>
+                      <div className="text-[13px] font-black text-white/26">�?/div>
                       <div className="min-w-[70px] text-left">
                         <div className="text-[10px] font-black tracking-widest text-white/50">
                           <span aria-hidden="true">{upcomingEnvironmentConfig.icon}</span> {environmentLabel(upcomingEnvironmentType)}
@@ -4605,7 +4602,7 @@ export default function App() {
                 <div className="relative z-10 mt-1 text-[9px] font-semibold text-white/70">
                   {mutationEventStatus.startsWith('下一次感染：') ? (
                     <>
-                      下一次{activeMutationLabel}感染：
+                      下一次{activeMutationLabel}感染�?
                       <span className="mx-0.5 text-[12px] font-black text-white drop-shadow-[0_0_7px_rgba(255,255,255,0.28)]">
                         {mutationRoundsRemaining}
                       </span>
@@ -4694,7 +4691,7 @@ export default function App() {
                             if (aiDmg > 0) {
                               return isPlayerHome ? '突破成功' : '反制成功';
                             }
-                            return isPlayerHome ? '防守被突破' : '战线破裂';
+                            return isPlayerHome ? '防守被突�? : '战线破裂';
                           })()}
                         </span>
                       </div>
@@ -4707,7 +4704,7 @@ export default function App() {
                           if (pDmg === 0 && aiDmg === 0) return '对冲抵消';
                           if (pDmg > 0 && aiDmg > 0) return '双向受击';
                           if (aiDmg > 0) {
-                            return clashResult.noDefense ? '对方未出牌' : '克制成功';
+                            return clashResult.noDefense ? '对方未出�? : '克制成功';
                           }
                           return clashResult.noDefense ? '防守空过' : '防守失败';
                         })()}
@@ -4735,7 +4732,7 @@ export default function App() {
                                 : ''}
                             </span>
                             <span className={`text-[12px] font-extrabold ${item.winner === 'HOME' ? 'text-amber-400' : item.winner === 'GUEST' ? 'text-sky-400' : 'text-zinc-500'}`}>
-                              {item.winner === 'HOME' ? '▶' : item.winner === 'GUEST' ? '◀' : '＝'}
+                              {item.winner === 'HOME' ? '�? : item.winner === 'GUEST' ? '◀' : '�?}
                             </span>
                             <span className="font-extrabold text-white text-[11px]">
                               {item.guestMutationType === 'VOLCANO' && item.winner === 'GUEST' ? '🔥 ' : ''}
@@ -4758,7 +4755,7 @@ export default function App() {
                         ))}
                         {clashResult.matches.length === 0 && (
                           <div className="text-[10px] text-zinc-400 opacity-80 uppercase tracking-widest font-bold">
-                            对方未出牌
+                            对方未出�?
                           </div>
                         )}
                       </div>
@@ -4791,10 +4788,10 @@ export default function App() {
                                 <span className="mx-1 text-orange-200/40">|</span>
                                 卡牌基础伤害：{clashResult.aiBaseDamage}
                                 {clashResult.aiVolcanoDamage > 0 && (
-                                  <span className="text-orange-300">　火山异变：+{clashResult.aiVolcanoDamage}</span>
+                                  <span className="text-orange-300">　火山异变�?{clashResult.aiVolcanoDamage}</span>
                                 )}
                                 {clashResult.aiResonanceDamage > 0 && (
-                                  <span className="text-red-300">　灼烧伤害：+{clashResult.aiResonanceDamage}</span>
+                                  <span className="text-red-300">　灼烧伤害�?{clashResult.aiResonanceDamage}</span>
                                 )}
                                 <span className="text-white/80">　最终伤害：{clashResult.aiHPChange}</span>
                               </div>
@@ -4805,10 +4802,10 @@ export default function App() {
                                 <span className="mx-1 text-orange-200/40">|</span>
                                 卡牌基础伤害：{clashResult.playerBaseDamage}
                                 {clashResult.playerVolcanoDamage > 0 && (
-                                  <span className="text-orange-300">　火山异变：+{clashResult.playerVolcanoDamage}</span>
+                                  <span className="text-orange-300">　火山异变�?{clashResult.playerVolcanoDamage}</span>
                                 )}
                                 {clashResult.playerResonanceDamage > 0 && (
-                                  <span className="text-red-300">　灼烧伤害：+{clashResult.playerResonanceDamage}</span>
+                                  <span className="text-red-300">　灼烧伤害�?{clashResult.playerResonanceDamage}</span>
                                 )}
                                 <span className="text-white/80">　最终伤害：{clashResult.playerHPChange}</span>
                               </div>
@@ -4834,7 +4831,7 @@ export default function App() {
                             )}
                             {(clashResult.playerSymbiosisTriggered || clashResult.aiSymbiosisTriggered) && (
                               <div className="rounded border border-emerald-400/25 bg-emerald-900/12 px-2 py-1 text-emerald-200/90">
-                                🌿 共生绽放　森林恢复：+2 HP　下一次感染提前 1 轮
+                                🌿 共生绽放　森林恢复�?2 HP　下一次感染提�?1 �?
                               </div>
                             )}
                           </div>
@@ -4939,7 +4936,7 @@ export default function App() {
           className="fixed left-[max(18px,calc((100vw-1500px)/2+24px))] bottom-[214px] z-[36] h-[52px] w-[52px] rounded-lg border border-border/80 bg-[#0a0a0b]/86 text-text-main shadow-[0_0_18px_rgba(0,0,0,0.28)] backdrop-blur-md transition-all hover:border-accent/45 hover:text-accent active:scale-95 flex flex-col items-center justify-center font-mono"
           aria-label="打开战斗日志"
         >
-          <span className="text-[18px] leading-none">☰</span>
+          <span className="text-[18px] leading-none">�?/span>
           <span className="mt-1 text-[10px] font-black tracking-widest leading-none">日志</span>
           {!isBattleLogOpen && logs.length > 0 && (
             <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(245,158,11,0.7)]" />
@@ -4997,7 +4994,7 @@ export default function App() {
               const isGlacierInfectionLog = (isEnvironment && log.includes('冰川感染')) || (log.includes('[玩家]') && log.includes('冰川'));
               const isGlacierRecycleLog = log.includes('[冰川回收]');
               const isGlacierEchoLog = log.includes('极寒回响');
-              const isGlacierNormalReturnLog = isGlacierRecycleLog && (log.includes('恢复为普通牌') || log.includes('已使用过') || log.includes('返回手牌并恢复'));
+              const isGlacierNormalReturnLog = isGlacierRecycleLog && (log.includes('恢复为普通牌') || log.includes('已使用过') || log.includes('返回手牌并恢�?));
               const isAiMutation = isEnvironment && log.includes('对手获得');
               const isMutationLimit = isEnvironment && log.includes('上限');
               const isMutationClosed = isEnvironment && log.includes('耗尽');
@@ -5120,7 +5117,7 @@ export default function App() {
             <>
               <motion.button
                 type="button"
-                aria-label="关闭退出大厅确认"
+                aria-label="关闭退出大厅确�?
                 className="fixed inset-0 z-[118] cursor-default bg-black/55 backdrop-blur-[2px]"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -5140,8 +5137,7 @@ export default function App() {
                 onClick={event => event.stopPropagation()}
               >
                 <div id="exit-lobby-title" className="text-center text-[15px] font-black tracking-widest text-accent">
-                  退出大厅
-                </div>
+                  退出大�?                </div>
                 <div className="mt-3 text-center text-[12px] font-bold leading-relaxed text-text-dim/80">
                   是否保留当前进度后返回大厅？
                 </div>
@@ -5151,15 +5147,13 @@ export default function App() {
                     onClick={() => exitBattleToLobby(true)}
                     className="h-10 rounded-lg border border-emerald-300/28 bg-emerald-950/28 text-[11px] font-black tracking-widest text-emerald-100 transition-all hover:border-emerald-200/55 hover:bg-emerald-900/35 active:scale-[0.98]"
                   >
-                    保留存档退出
-                  </button>
+                    保留存档退�?                  </button>
                   <button
                     type="button"
                     onClick={() => exitBattleToLobby(false)}
                     className="h-10 rounded-lg border border-red-300/24 bg-red-950/24 text-[11px] font-black tracking-widest text-red-100 transition-all hover:border-red-200/45 hover:bg-red-900/30 active:scale-[0.98]"
                   >
-                    不保留存档退出
-                  </button>
+                    不保留存档退�?                  </button>
                   <button
                     type="button"
                     onClick={() => setIsExitLobbyDialogOpen(false)}
@@ -5323,14 +5317,14 @@ export default function App() {
                       {showDewdrops && (
                         <>
                           <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/60">
-                            露珠：{faith.level >= 1 ? `${playerDewdrops} / ${DEER_SPIRIT_CONFIG.dewdropLimit}` : '未解锁'}
+                            露珠：{faith.level >= 1 ? `${playerDewdrops} / ${DEER_SPIRIT_CONFIG.dewdropLimit}` : '未解�?}
                           </div>
                           <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/50">
-                            鹿角奔袭：{faith.level >= 3 ? (maxAntlerChargeHpCost > 0 ? '可用' : '生命不足') : '未解锁'}
+                            鹿角奔袭：{faith.level >= 3 ? (maxAntlerChargeHpCost > 0 ? '可用' : '生命不足') : '未解�?}
                           </div>
                           {faith.level >= 4 && (
                             <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/50">
-                              万木奔涌：{hasTriggeredVerdantSurgeThisEnemy ? '本关已触发' : '本关就绪'}
+                              万木奔涌：{hasTriggeredVerdantSurgeThisEnemy ? '本关已触�? : '本关就绪'}
                             </div>
                           )}
                         </>
@@ -5338,11 +5332,11 @@ export default function App() {
                       {showFrostSigils && (
                         <>
                           <div className="mt-0.5 text-[8px] font-semibold text-cyan-100/60">
-                            ❄️ 霜签：{faith.level >= 1 ? `${playerFrostSigils} / ${FROST_LORD_CONFIG.frostSigilLimit}` : '未解锁'}
+                            ❄️ 霜签：{faith.level >= 1 ? `${playerFrostSigils} / ${FROST_LORD_CONFIG.frostSigilLimit}` : '未解�?}
                           </div>
                           {faith.level >= 4 && (
                             <div className="mt-0.5 text-[8px] font-semibold text-cyan-100/50">
-                              ❄️ 暴雪：{hasTriggeredBlizzardThisEnemy ? '本关已触发' : '本关就绪'}
+                              ❄️ 暴雪：{hasTriggeredBlizzardThisEnemy ? '本关已触�? : '本关就绪'}
                             </div>
                           )}
                         </>
@@ -5414,7 +5408,7 @@ export default function App() {
                     <CardArtLayer card={card} />
                     {maturedCardGlowIds[card.id] && (
                       <div className="absolute -top-7 left-1/2 -translate-x-1/2 rounded-md border border-emerald-400/35 bg-black/75 px-2 py-1 text-[10px] font-black tracking-widest text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.22)] pointer-events-none">
-                        🌿 已成熟
+                        🌿 已成�?
                       </div>
                     )}
                     <CardIcon type={card.type} className="hidden" />
@@ -5461,21 +5455,21 @@ export default function App() {
           <div className="flex flex-wrap justify-center gap-3 min-h-[40px] max-w-[680px]">
             {showResonancePreview && (
               <div className="absolute bottom-[84px] left-1/2 -translate-x-1/2 w-[220px] max-h-[44px] rounded-md border border-orange-500/25 bg-[#130b08]/88 px-2.5 py-1.5 text-center font-mono shadow-[0_0_12px_rgba(249,115,22,0.10)] pointer-events-none">
-                <div className="text-[9.5px] font-black tracking-widest text-orange-200 leading-tight">{VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣已激活</div>
-                <div className="mt-0.5 text-[8px] font-semibold text-orange-100/60 leading-tight">火山牌命中后额外造成 {VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage} 点伤害</div>
+                <div className="text-[9.5px] font-black tracking-widest text-orange-200 leading-tight">{VOLCANO_ENVIRONMENT_CONFIG.icon} 灼烧共鸣已激�?/div>
+                <div className="mt-0.5 text-[8px] font-semibold text-orange-100/60 leading-tight">火山牌命中后额外造成 {VOLCANO_ENVIRONMENT_CONFIG.resonanceBonusDamage} 点伤�?/div>
               </div>
             )}
             {showSymbiosisPreview && (
               <div className={`absolute ${showResonancePreview ? 'bottom-[132px]' : 'bottom-[84px]'} left-1/2 -translate-x-1/2 w-[250px] max-h-[48px] rounded-md border border-emerald-500/30 bg-[#07140f]/90 px-3 py-1.5 text-center font-mono shadow-[0_0_14px_rgba(16,185,129,0.12)] pointer-events-none`}>
-                <div className="text-[9.5px] font-black tracking-widest text-emerald-200 leading-tight">🌿 共生绽放已激活</div>
-                <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/65 leading-tight">命中后恢复最多 2 HP</div>
-                <div className="text-[8px] font-semibold text-emerald-100/50 leading-tight">下一次感染提前 1 轮</div>
+                <div className="text-[9.5px] font-black tracking-widest text-emerald-200 leading-tight">🌿 共生绽放已激�?/div>
+                <div className="mt-0.5 text-[8px] font-semibold text-emerald-100/65 leading-tight">命中后恢复最�?2 HP</div>
+                <div className="text-[8px] font-semibold text-emerald-100/50 leading-tight">下一次感染提�?1 �?/div>
               </div>
             )}
             {showGlacierEchoPreview && (
               <div className={`glacier-echo-preview absolute ${showResonancePreview || showSymbiosisPreview ? 'bottom-[132px]' : 'bottom-[84px]'} left-1/2 -translate-x-1/2 w-[280px] max-h-[48px] rounded-md border border-cyan-300/30 bg-[#06121a]/90 px-3 py-1.5 text-center font-mono shadow-[0_0_14px_rgba(34,211,238,0.12)] pointer-events-none`}>
-                <div className="text-[9.5px] font-black tracking-widest text-cyan-100 leading-tight">❄️ 极寒回响待触发</div>
-                <div className="mt-0.5 text-[8px] font-semibold text-cyan-50/65 leading-tight">至少 1 张冰川牌形成平局时，可保留 1 张异变牌</div>
+                <div className="text-[9.5px] font-black tracking-widest text-cyan-100 leading-tight">❄️ 极寒回响待触�?/div>
+                <div className="mt-0.5 text-[8px] font-semibold text-cyan-50/65 leading-tight">至少 1 张冰川牌形成平局时，可保�?1 张异变牌</div>
               </div>
             )}
             {/* BUTTON 1: LEFT BUTTON */}
@@ -5568,7 +5562,7 @@ export default function App() {
                 {faithState.DEER_SPIRIT.level >= 4 && (
                   <div className="absolute left-1/2 top-[44px] w-[110px] -translate-x-1/2 rounded border border-emerald-300/18 bg-black/35 px-1.5 py-0.5 text-center font-mono text-[7px] font-black tracking-wider text-emerald-100/55 pointer-events-none">
                     <div>🌿 万木奔涌</div>
-                    <div>{hasTriggeredVerdantSurgeThisEnemy ? '本关已触发' : '本关就绪'}</div>
+                    <div>{hasTriggeredVerdantSurgeThisEnemy ? '本关已触�? : '本关就绪'}</div>
                   </div>
                 )}
                 <AnimatePresence>
@@ -5581,7 +5575,7 @@ export default function App() {
                       className={`absolute bottom-[48px] left-1/2 z-[94] -translate-x-1/2 rounded-lg border border-emerald-300/25 bg-[#06130e]/96 p-2 text-center font-mono shadow-[0_0_22px_rgba(16,185,129,0.18)] ${antlerChargeMaxHpCost > 3 ? 'w-[360px]' : 'w-[226px]'}`}
                     >
                       <div className="text-[10px] font-black tracking-widest text-emerald-100/80">
-                        {canUseVerdantSurge ? '🌿 万木奔涌' : '请选择消耗生命'}
+                        {canUseVerdantSurge ? '🌿 万木奔涌' : '请选择消耗生�?}
                       </div>
                       <div className="mt-1 text-[8px] font-semibold text-emerald-100/45">
                         安全线：{Math.round(antlerChargeSafeHpRatio * 100)}% · 最多消耗：{antlerChargeMaxHpCost} HP
@@ -5603,7 +5597,7 @@ export default function App() {
                                 }
                               `}
                             >
-                              <div>消耗 {cost} HP</div>
+                              <div>消�?{cost} HP</div>
                               <div className="mt-1 text-[8px] text-emerald-100/65">伤害 {damage}</div>
                             </button>
                           );
@@ -5663,7 +5657,7 @@ export default function App() {
                                 }
                               `}
                             >
-                              <div>释放 {amount} 枚</div>
+                              <div>释放 {amount} �?/div>
                               <div className="mt-1 text-[8px] text-cyan-100/65">伤害 {amount}</div>
                             </button>
                           );
@@ -5774,7 +5768,7 @@ export default function App() {
               <div className="absolute w-[42px] h-[56px] bg-[#1a1a22] border border-emerald-500/25 rounded flex items-center justify-center shadow-md overflow-hidden">
                 <UiAssetIcon src={ART_ASSETS.ui.discardPile} alt={zhCN.resources.playerDiscard} className="absolute inset-1 h-[calc(100%-0.5rem)] w-[calc(100%-0.5rem)] opacity-90" />
                 <div className="relative z-10 flex flex-col items-center justify-center font-mono text-[9px] text-emerald-400/80">
-                  <span className="text-sm leading-none">▼</span>
+                  <span className="text-sm leading-none">�?/span>
                 </div>
               </div>
             </div>
@@ -5815,8 +5809,8 @@ export default function App() {
             <div className="relative z-10 text-[12px] font-black tracking-widest text-emerald-200">
               🌿 {forestRecoveryFeedback.symbiosisByTarget.AI ? '对手触发共生绽放' : '共生绽放'}
             </div>
-            <div className="relative z-10 mt-1 text-[10px] font-bold text-emerald-100/75">森林恢复：+2 HP</div>
-            <div className="relative z-10 text-[9px] font-semibold text-emerald-100/55">下一次感染提前 1 轮</div>
+            <div className="relative z-10 mt-1 text-[10px] font-bold text-emerald-100/75">森林恢复�?2 HP</div>
+            <div className="relative z-10 text-[9px] font-semibold text-emerald-100/55">下一次感染提�?1 �?/div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -5869,22 +5863,22 @@ export default function App() {
             {glacierRecycleFeedback.echoByTarget?.AI ? (
               <>
                 <div className="relative z-10 text-[12px] font-black tracking-widest text-cyan-50">❄️ 对手触发极寒回响</div>
-                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">1 张冰川牌保留异变属性</div>
+                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">1 张冰川牌保留异变属�?/div>
               </>
             ) : glacierRecycleFeedback.echoByTarget?.PLAYER ? (
               <>
                 <div className="relative z-10 text-[12px] font-black tracking-widest text-cyan-50">❄️ 极寒回响</div>
-                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">1 张冰川牌保留异变属性</div>
+                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">1 张冰川牌保留异变属�?/div>
               </>
             ) : glacierRecycleFeedback.targets.includes('AI') && !glacierRecycleFeedback.targets.includes('PLAYER') ? (
               <>
                 <div className="relative z-10 text-[12px] font-black tracking-widest text-cyan-100">❄️ 对手回收 1 张冰川牌</div>
-                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手牌</div>
+                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手�?/div>
               </>
             ) : (
               <>
                 <div className="relative z-10 text-[12px] font-black tracking-widest text-cyan-100">❄️ 冰封回收</div>
-                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手牌</div>
+                <div className="relative z-10 mt-1 text-[10px] font-bold text-cyan-50/72">冰川牌返回手�?/div>
               </>
             )}
           </motion.div>
@@ -5904,7 +5898,7 @@ export default function App() {
             <div className="text-[12px] font-black tracking-widest text-white/90">环境切换</div>
             <div className="mt-1 text-[10px] font-bold text-white/70">
               {ENVIRONMENT_CONFIG_BY_ID[environmentSwitchNotice.from].icon} {environmentLabel(environmentSwitchNotice.from)}
-              <span className="mx-2 text-white/40">→</span>
+              <span className="mx-2 text-white/40">�?/span>
               {ENVIRONMENT_CONFIG_BY_ID[environmentSwitchNotice.to].icon} {environmentLabel(environmentSwitchNotice.to)}
             </div>
           </motion.div>
@@ -5921,8 +5915,8 @@ export default function App() {
             transition={{ duration: 0.85, ease: 'easeOut' }}
             className="absolute left-1/2 top-[242px] z-[120] -translate-x-1/2 rounded-lg border border-fuchsia-300/25 bg-[#100b14]/92 px-4 py-2 text-center font-mono shadow-[0_0_24px_rgba(217,70,239,0.14)] pointer-events-none"
           >
-            <div className="text-[12px] font-black tracking-widest text-fuchsia-100">第 {challengeStageNotice.stage} 关</div>
-            <div className="mt-1 text-[10px] font-bold text-fuchsia-100/70">新的对手已进入战场</div>
+            <div className="text-[12px] font-black tracking-widest text-fuchsia-100">�?{challengeStageNotice.stage} �?/div>
+            <div className="mt-1 text-[10px] font-bold text-fuchsia-100/70">新的对手已进入战�?/div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -5961,7 +5955,7 @@ export default function App() {
                         </div>
                         <div className="mt-1 text-[11px] font-black tracking-wider text-white/85">{deity.name}</div>
                         <div className={`mt-1 text-[9px] font-bold ${sameEnvironment ? 'text-fuchsia-100/85' : 'text-white/45'}`}>
-                          {sameEnvironment ? '同环境' : '异环境'}：+{gain} 信仰
+                          {sameEnvironment ? '同环�? : '异环�?}�?{gain} 信仰
                         </div>
                       </button>
                     );
@@ -5991,13 +5985,13 @@ export default function App() {
               className="glacier-echo-modal relative overflow-hidden w-[420px] rounded-xl border border-cyan-300/35 bg-[#06121a]/94 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.45),0_0_24px_rgba(34,211,238,0.14)] backdrop-blur-md font-mono text-center pointer-events-auto"
             >
               <h3 className="text-cyan-100 text-sm font-black tracking-widest">❄️ 极寒回响</h3>
-              <p className="mt-1 text-[11px] text-cyan-50/75 font-semibold">请选择 1 张冰川牌保留异变属性</p>
+              <p className="mt-1 text-[11px] text-cyan-50/75 font-semibold">请选择 1 张冰川牌保留异变属�?/p>
               <div className="mt-5 flex items-center justify-center gap-4">
                 {glacierEchoCandidates.map(card => (
                   <button
                     key={card.id}
                     onClick={() => handleGlacierEchoPick(card.id)}
-                    title={`返回手牌后仍保留冰川属性\n每张冰川牌最多保留 1 次`}
+                    title={`返回手牌后仍保留冰川属性\n每张冰川牌最多保�?1 次`}
                     className={`glacier-echo-candidate group w-[126px] h-[154px] rounded-xl bg-surface border border-cyan-300/30 flex flex-col items-center justify-center relative card-shadow cursor-pointer hover:border-cyan-200 hover:-translate-y-1 transition-all overflow-hidden ${getCardBorderClass(card.type)}`}
                   >
                     <CardFaceFallback card={card} />
@@ -6006,11 +6000,11 @@ export default function App() {
                     <CardIcon type={card.type} className="hidden" />
                     <div className="hidden">
                       <div>{glacierCardLabel(card.type)}</div>
-                      <div className="text-cyan-100/90">保留冰川属性</div>
+                      <div className="text-cyan-100/90">保留冰川属�?/div>
                     </div>
                     <div className="absolute -bottom-16 left-1/2 hidden w-[176px] -translate-x-1/2 rounded-md border border-cyan-300/25 bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed text-cyan-50/75 shadow-xl group-hover:block">
-                      <div>返回手牌后仍保留冰川属性</div>
-                      <div className="text-cyan-50/55">每张冰川牌最多保留 1 次</div>
+                      <div>返回手牌后仍保留冰川属�?/div>
+                      <div className="text-cyan-50/55">每张冰川牌最多保�?1 �?/div>
                     </div>
                   </button>
                 ))}
@@ -6035,7 +6029,7 @@ export default function App() {
                 {activeEnvironmentConfig.icon} {activeMutationLabel}感染
               </h3>
               <p className={`mt-1 text-[11px] ${isVolcanoEnvironment ? 'text-orange-100/75' : isGlacierEnvironment ? 'text-cyan-50/75' : 'text-emerald-100/75'} font-semibold`}>
-                请选择 1 张手牌感染为{isVolcanoEnvironment ? '火山牌' : isGlacierEnvironment ? '冰川牌' : '森林幼苗'}
+                请选择 1 张手牌感染为{isVolcanoEnvironment ? '火山�? : isGlacierEnvironment ? '冰川�? : '森林幼苗'}
               </p>
               <div className="mt-5 flex items-center justify-center gap-4">
                 {mutationCandidates.map(card => (
@@ -6059,7 +6053,7 @@ export default function App() {
                     <div className="hidden">
                       <div>普通{plainCardLabel(card.type)}</div>
                       <div className={isVolcanoEnvironment ? 'text-orange-200/90' : isGlacierEnvironment ? 'text-cyan-100/90' : 'text-emerald-200/90'}>
-                        → {isForestEnvironment ? `${forestCardLabel(card.type)}·幼苗` : activeMutationCardLabel(card.type)}
+                        �?{isForestEnvironment ? `${forestCardLabel(card.type)}·幼苗` : activeMutationCardLabel(card.type)}
                       </div>
                     </div>
                     <div className={`absolute -bottom-20 left-1/2 hidden w-[188px] -translate-x-1/2 rounded-md border ${isVolcanoEnvironment ? 'border-orange-500/25 text-orange-100/75' : isGlacierEnvironment ? 'border-cyan-300/25 text-cyan-50/75' : 'border-emerald-500/25 text-emerald-100/75'} bg-[#111]/95 px-2 py-1.5 text-[9px] leading-relaxed shadow-xl group-hover:block`}>
@@ -6143,7 +6137,7 @@ export default function App() {
                   onClick={() => setActiveDiscardModal(null)}
                   className="w-5 h-5 rounded hover:bg-white/10 flex items-center justify-center text-text-dim hover:text-white transition-colors cursor-pointer text-xs"
                 >
-                  ✕
+                  �?
                 </button>
               </div>
 
@@ -6164,7 +6158,7 @@ export default function App() {
                   <div className="space-y-3 py-1">
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="text-base select-none">✊</span>
+                        <span className="text-base select-none">�?/span>
                         <span className="text-text-dim/80">{zhCN.cards.ROCK}</span>
                       </div>
                       <span className="font-bold text-[#e5e5eb] font-mono">× {stats.ROCK}</span>
@@ -6180,7 +6174,7 @@ export default function App() {
 
                     <div className="flex justify-between items-center text-xs">
                       <div className="flex items-center gap-2">
-                        <span className="text-base select-none">✋</span>
+                        <span className="text-base select-none">�?/span>
                         <span className="text-text-dim/80">{zhCN.cards.PAPER}</span>
                       </div>
                       <span className="font-bold text-[#e5e5eb] font-mono">× {stats.PAPER}</span>
@@ -6663,7 +6657,7 @@ export default function App() {
 
         .glacier-recycle-burst::before,
         .glacier-recycle-burst::after {
-          content: "✦";
+          content: "�?;
           position: absolute;
           top: 15px;
           color: rgba(224, 242, 254, 0.70);
@@ -6692,7 +6686,7 @@ export default function App() {
 
         .forest-symbiosis-burst::before,
         .forest-symbiosis-burst::after {
-          content: "•";
+          content: "�?;
           position: absolute;
           top: 18px;
           color: rgba(110, 231, 183, 0.70);

@@ -7,12 +7,12 @@ export type SoundEffectId =
   | 'mutation';
 
 const SOUND_EFFECTS: Record<SoundEffectId, string> = {
-  cardSelect: '/assets/audio/ui/card-select.wav',
-  cardPlay: '/assets/audio/ui/card-play.wav',
-  cardReveal: '/assets/audio/ui/card-reveal.wav',
-  cardDraw: '/assets/audio/ui/card-draw.wav',
-  hit: '/assets/audio/battle/hit.wav',
-  mutation: '/assets/audio/environment/mutation.wav',
+  cardSelect: './assets/audio/ui/card-select.wav',
+  cardPlay: './assets/audio/ui/card-play.wav',
+  cardReveal: './assets/audio/ui/card-reveal.wav',
+  cardDraw: './assets/audio/ui/card-draw.wav',
+  hit: './assets/audio/battle/hit.wav',
+  mutation: './assets/audio/environment/mutation.wav',
 };
 
 const audioCache = new Map<SoundEffectId, HTMLAudioElement>();

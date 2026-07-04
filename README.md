@@ -1,20 +1,59 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# 命运决斗 Duel of Fate
 
-# Run and deploy your AI Studio app
+一款基于“石头 / 剪刀 / 布”克制关系扩展而来的网页端卡牌策略 Demo。项目以“快速可玩原型 + 作品集展示”为目标，围绕公共牌库、主客场攻防、环境异变牌、神明祝福等系统，尝试把简单规则包装成更具策略感的卡牌战斗体验。
 
-This contains everything you need to run your app locally.
+## 在线体验
 
-View your app in AI Studio: https://ai.studio/apps/7b233c9a-fdad-4654-966b-710bb3354ad6
+[点击游玩命运决斗](https://max-1314-qian.github.io/duel-of-fate-fixed/)
 
-## Run Locally
+## 项目定位
 
-**Prerequisites:**  Node.js
+本项目是个人游戏策划作品集 Demo，重点展示：
 
+- 玩法规则设计：从石头剪刀布的基础克制关系扩展为卡牌战斗。
+- 系统设计能力：公共牌库、补牌规则、弃牌区、主客场轮换、挑战关卡。
+- 数值与节奏验证：通过生命值、护盾、手牌上限、补牌节奏控制对局体验。
+- 美术与交互包装：使用卡牌图像、环境异变图、音效反馈强化战斗表现。
+- AI 协作开发流程：使用 ChatGPT / Codex 辅助完成规则设计、代码实现、调试与部署。
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 核心玩法
+
+玩家与 AI 轮流进入主场 / 客场阶段，通过出牌进行攻防对抗。
+
+基础克制关系：
+
+- 石头 克制 剪刀
+- 剪刀 克制 布
+- 布 克制 石头
+
+每轮战斗中，主场方负责进攻，客场方负责防守。系统根据卡牌克制、剩余命中牌、主场加成等规则结算伤害。
+
+## 已实现内容
+
+- 基础卡牌战斗循环
+- 玩家与 AI 手牌系统
+- 公共牌库与双方弃牌区
+- 主客场攻防阶段
+- 补牌与牌库耗尽规则
+- 挑战模式关卡流程
+- 生命值、护盾、手牌数量显示
+- 火山、冰川、森林等环境异变牌资源
+- 卡牌美术资源与音效资源加载
+- GitHub Pages 在线部署
+
+## 技术栈
+
+- React（前端框架）
+- TypeScript（类型脚本）
+- Vite（前端构建工具）
+- Tailwind CSS（样式工具）
+- GitHub Actions（自动部署流程）
+- GitHub Pages（网页托管）
+
+## 本地运行
+
+需要先安装 Node.js。
+
+```bash
+npm install
+npm.cmd run dev

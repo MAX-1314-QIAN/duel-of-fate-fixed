@@ -1,4 +1,4 @@
-export type SoundEffectId =
+﻿export type SoundEffectId =
   | 'cardSelect'
   | 'cardPlay'
   | 'cardReveal'

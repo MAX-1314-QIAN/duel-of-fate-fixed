@@ -68,10 +68,29 @@ const ART_ASSETS = {
     SCISSORS: '/assets/cards/base/scissors.webp',
   },
   cardBack: '/assets/cards/backs/card-back.webp',
-  mutationFrames: {
-    VOLCANO: '/assets/cards/frames/frame-volcano.png',
-    FOREST: '/assets/cards/frames/frame-forest.png',
-    GLACIER: '/assets/cards/frames/frame-glacier.png',
+  cardMutations: {
+    VOLCANO: {
+      ROCK: '/assets/cards/mutations/volcano-rock.webp',
+      PAPER: '/assets/cards/mutations/volcano-paper.webp',
+      SCISSORS: '/assets/cards/mutations/volcano-scissors.webp',
+    },
+    GLACIER: {
+      ROCK: '/assets/cards/mutations/glacier-rock.webp',
+      PAPER: '/assets/cards/mutations/glacier-paper.webp',
+      SCISSORS: '/assets/cards/mutations/glacier-scissors.webp',
+    },
+    FOREST: {
+      SEEDLING: {
+        ROCK: '/assets/cards/mutations/forest-seedling-rock.webp',
+        PAPER: '/assets/cards/mutations/forest-seedling-paper.webp',
+        SCISSORS: '/assets/cards/mutations/forest-seedling-scissors.webp',
+      },
+      MATURE: {
+        ROCK: '/assets/cards/mutations/forest-mature-rock.webp',
+        PAPER: '/assets/cards/mutations/forest-mature-paper.webp',
+        SCISSORS: '/assets/cards/mutations/forest-mature-scissors.webp',
+      },
+    },
   },
   deities: {
     KITCHEN_GOD: '/assets/deities/deity-kitchen-god.webp',
@@ -168,7 +187,7 @@ const CardIcon = ({ type, className }: { type: CardType; className?: string }) =
   }
 };
 
-const AssetImage = ({ src, alt, className }: { src: string; alt: string; className: string }) => {
+const AssetImage = ({ src, fallbackSrc, alt, className }: { src: string; fallbackSrc?: string; alt: string; className: string }) => {
   const [failed, setFailed] = useState(false);
   if (failed) return null;
   return (
@@ -177,25 +196,39 @@ const AssetImage = ({ src, alt, className }: { src: string; alt: string; classNa
       alt={alt}
       className={className}
       draggable={false}
-      onError={() => setFailed(true)}
+      onError={event => {
+        if (fallbackSrc && event.currentTarget.getAttribute('src') !== fallbackSrc) {
+          event.currentTarget.src = fallbackSrc;
+          return;
+        }
+        setFailed(true);
+      }}
     />
   );
+};
+
+const getCardArtSrc = (card: Card) => {
+  if (card.mutationType === 'VOLCANO') {
+    return ART_ASSETS.cardMutations.VOLCANO[card.type];
+  }
+  if (card.mutationType === 'GLACIER') {
+    return ART_ASSETS.cardMutations.GLACIER[card.type];
+  }
+  if (card.mutationType === 'FOREST') {
+    const stage = card.forestGrowthStage === 'MATURE' ? 'MATURE' : 'SEEDLING';
+    return ART_ASSETS.cardMutations.FOREST[stage][card.type];
+  }
+  return ART_ASSETS.cardBase[card.type];
 };
 
 const CardArtLayer = ({ card }: { card: Card }) => (
   <>
     <AssetImage
-      src={ART_ASSETS.cardBase[card.type]}
+      src={getCardArtSrc(card)}
+      fallbackSrc={ART_ASSETS.cardBase[card.type]}
       alt={cardLabel(card.type)}
       className="absolute inset-0 z-[1] h-full w-full rounded-[inherit] object-cover"
     />
-    {card.mutationType && (
-      <AssetImage
-        src={ART_ASSETS.mutationFrames[card.mutationType]}
-        alt={environmentLabel(card.mutationType)}
-        className="absolute inset-0 z-[4] h-full w-full rounded-[inherit] object-cover pointer-events-none"
-      />
-    )}
     <div className="absolute inset-0 z-[2] rounded-[inherit] bg-gradient-to-b from-black/0 via-black/5 to-black/28 pointer-events-none" />
   </>
 );
